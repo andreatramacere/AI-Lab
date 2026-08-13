@@ -12,10 +12,11 @@ It currently includes:
 - NumPy-style broadcasting for element-wise binary operations
 - element-wise Add, Subtract, Multiply, Power, and ReLU
 - Sum reduction
-- matrix-vector MatMul
+- vector-vector, matrix-vector, vector-matrix, and matrix-matrix MatMul
+- differentiable 2D transpose
 - learnable Parameter objects
 - Module composition
-- Linear and ReLU layers
+- Linear layers for individual vectors and row-wise batches
 - MSELoss
 - SGD
 - a tiny multilayer training example
@@ -60,8 +61,7 @@ This is intentionally a teaching framework, not a production numerical library.
 
 Not yet supported:
 
-- general matrix-matrix multiplication
-- batches
+- rank greater than 2 and batched MatMul
 - NumPy-backed storage
 - GPU execution
 - dtype/device management

@@ -66,14 +66,14 @@ Optimizer
 
 ## Frontiera architetturale corrente
 
-Il ciclo di training e il broadcasting delle operazioni element-wise sono consolidati. Il prossimo nodo da espandere è il passaggio dal singolo esempio al batch:
+Il ciclo di training, il broadcasting, il batch e `MatMul` per Tensor 1D/2D sono consolidati. La prossima frontiera è separare la semantica tensoriale dall'esecuzione esplicita mediante loop Python:
 
 ```text
-BATCH
-  ↓
-MATMUL GENERALE
-  ↓
 VECTORIZATION
+  ↓
+BACKEND NUMERICO
+  ↓
+CONFRONTO CON PYTORCH
 ```
 
 Questa espansione non cambia la separazione tra modello, Autograd e optimizer. Generalizza le operazioni su cui quei livelli sono costruiti.
