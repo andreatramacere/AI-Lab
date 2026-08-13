@@ -1,6 +1,6 @@
 """Learnable parameter type for ToyTorch."""
 
-from tensor import Tensor
+from .tensor import Tensor
 
 
 class Parameter(Tensor):

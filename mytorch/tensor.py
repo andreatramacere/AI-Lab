@@ -81,37 +81,37 @@ class Tensor:
 
     def __add__(self, other):
         """Return element-wise addition of two tensors."""
-        from operations import Add
+        from .operations import Add
         return Add()(self, other)
 
     def __sub__(self, other):
         """Return element-wise subtraction of two tensors."""
-        from operations import Subtract
+        from .operations import Subtract
         return Subtract()(self, other)
 
     def __mul__(self, other):
         """Return element-wise multiplication of two tensors."""
-        from operations import Multiply
+        from .operations import Multiply
         return Multiply()(self, other)
 
     def __matmul__(self, other):
         """Return matrix-vector multiplication for the currently supported case."""
-        from operations import MatMul
+        from .operations import MatMul
         return MatMul()(self, other)
 
     def __pow__(self, exponent):
         """Raise every tensor element to a fixed numeric exponent."""
-        from operations import Power
+        from .operations import Power
         return Power(exponent)(self)
 
     def sum(self):
         """Reduce all tensor elements to a scalar sum."""
-        from operations import Sum
+        from .operations import Sum
         return Sum()(self)
 
     def relu(self):
         """Apply ReLU element-wise."""
-        from operations import ReLU
+        from .operations import ReLU
         return ReLU()(self)
 
     def _accumulate_grad(self, grad):

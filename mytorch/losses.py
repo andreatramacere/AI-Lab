@@ -1,6 +1,6 @@
 """Loss functions for ToyTorch."""
 
-from tensor import Tensor
+from .tensor import Tensor
 
 
 class MSELoss:

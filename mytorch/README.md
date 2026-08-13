@@ -20,16 +20,38 @@ It currently includes:
 - SGD
 - a tiny multilayer training example
 
-## Run the tests
+## Install
 
 ```bash
-python tests.py
+python -m pip install -e .
+```
+
+The editable install exposes the public API:
+
+```python
+from mytorch import Linear, MSELoss, SGD, Tensor
+```
+
+MyTorch has no runtime dependencies outside the Python standard library.
+
+## Run the tests
+
+From the repository root:
+
+```bash
+python -m mytorch.tests
 ```
 
 ## Run the demo
 
 ```bash
-python main.py
+mytorch-demo
+```
+
+or, without using the installed command:
+
+```bash
+python -m mytorch.main
 ```
 
 ## Current limitations

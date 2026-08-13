@@ -1,10 +1,10 @@
 """Small numerical smoke tests for ToyTorch."""
 
-from tensor import Tensor
-from layers import Linear
-from losses import MSELoss
-from module import Module
-from optim import SGD
+from .tensor import Tensor
+from .layers import Linear
+from .losses import MSELoss
+from .module import Module
+from .optim import SGD
 
 
 def assert_close(actual, expected, tol=1e-9):

@@ -7,7 +7,7 @@ Each Operation:
 4. implements the local backward rule used by autograd.
 """
 
-from tensor import Tensor
+from .tensor import Tensor
 
 
 def _is_number(value):

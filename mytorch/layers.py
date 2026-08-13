@@ -2,8 +2,8 @@
 
 import random
 
-from module import Module
-from parameter import Parameter
+from .module import Module
+from .parameter import Parameter
 
 
 class Linear(Module):

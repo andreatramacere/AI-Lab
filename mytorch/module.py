@@ -1,6 +1,6 @@
 """Base Module abstraction for ToyTorch."""
 
-from parameter import Parameter
+from .parameter import Parameter
 
 
 class Module:

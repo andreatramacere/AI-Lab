@@ -6,11 +6,11 @@ on a handful of scalar samples represented as one-element vectors.
 
 import random
 
-from tensor import Tensor
-from module import Module
-from layers import Linear, ReLU
-from losses import MSELoss
-from optim import SGD
+from .tensor import Tensor
+from .module import Module
+from .layers import Linear, ReLU
+from .losses import MSELoss
+from .optim import SGD
 
 
 class TinyNet(Module):
