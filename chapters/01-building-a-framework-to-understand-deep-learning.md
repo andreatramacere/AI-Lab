@@ -607,7 +607,117 @@ TENSOR DI ACTIVATION
 
 Anche i parametri non sono in genere memorizzati come un Tensor separato per neurone: i pesi di tutte le unità sono raccolti nella matrice `W`, mentre i bias sono raccolti nel vettore `b`.
 
-### Schema grafico: layer, neuroni, coordinate e pesi
+### Figura guida: una rete `3 → 2 → 3`
+
+Prima di analizzare matrici e indici, raccogliamo layer, neuroni e Tensor in un'unica figura.
+
+```mermaid
+flowchart LR
+    subgraph INPUT[INPUT — Tensor x, shape 3]
+        direction TB
+        X0((coordinata x₀))
+        X1((coordinata x₁))
+        X2((coordinata x₂))
+    end
+
+    subgraph HIDDEN[HIDDEN LAYER — Linear 3→2 + activation]
+        direction TB
+        H0((neurone hidden 0<br/>valore h₀))
+        H1((neurone hidden 1<br/>valore h₁))
+    end
+
+    subgraph HEAD[OUTPUT HEAD — Linear 2→3]
+        direction TB
+        Y0((neurone output 0<br/>prediction y_hat₀))
+        Y1((neurone output 1<br/>prediction y_hat₁))
+        Y2((neurone output 2<br/>prediction y_hat₂))
+    end
+
+    X0 --> H0
+    X0 --> H1
+    X1 --> H0
+    X1 --> H1
+    X2 --> H0
+    X2 --> H1
+
+    H0 --> Y0
+    H0 --> Y1
+    H0 --> Y2
+    H1 --> Y0
+    H1 --> Y1
+    H1 --> Y2
+```
+
+La figura va letta per **colonne**:
+
+```text
+COLONNA 1                       COLONNA 2                    COLONNA 3
+Input Tensor x                 Hidden layer                 Output head
+3 coordinate                   2 neuroni                    3 neuroni
+[x₀, x₁, x₂]                   valori [h₀, h₁]              valori [ŷ₀, ŷ₁, ŷ₂]
+shape (3,)                     hidden Tensor shape (2,)    prediction shape (3,)
+```
+
+I cerchi della prima colonna rappresentano le coordinate del dato di input. Non sono neuroni parametrizzati: non calcolano una somma pesata, ma forniscono valori ai neuroni del primo layer.
+
+I cerchi della seconda e terza colonna rappresentano unità di calcolo:
+
+```text
+hidden layer
+  2 neuroni → produce 2 valori → hidden Tensor shape (2,)
+
+output head
+  3 neuroni → produce 3 valori → prediction Tensor shape (3,)
+```
+
+La **larghezza di un layer** è il suo numero di neuroni e coincide con il numero di coordinate che quel layer produce:
+
+```text
+2 neuroni hidden       ↔ hidden dimension 2
+3 neuroni output       ↔ output dimension 3
+```
+
+Ogni gruppo verticale di valori forma un Tensor al confine tra due componenti:
+
+| Confine | Valori | Tensor | Shape |
+|---|---|---|---:|
+| ingresso della rete | `x₀, x₁, x₂` | `x` | `(3,)` |
+| dopo il hidden layer | `h₀, h₁` | `h` | `(2,)` |
+| dopo l'output head | `ŷ₀, ŷ₁, ŷ₂` | `ŷ` | `(3,)` |
+
+Le frecce rappresentano collegamenti pesati. Poiché entrambi i layer sono fully connected:
+
+```text
+input → hidden
+  3 coordinate × 2 neuroni = 6 collegamenti
+  weight W¹ con shape (2, 3)
+
+hidden → output
+  2 coordinate × 3 neuroni = 6 collegamenti
+  weight W² con shape (3, 2)
+```
+
+La rete completa realizza quindi due cambi di rappresentazione:
+
+```text
+x (3,)
+  ↓ Linear(3,2) + activation
+h (2,)
+  ↓ Linear(2,3), output head
+ŷ (3,)
+```
+
+Il fatto che input e prediction abbiano entrambi shape `(3,)` è soltanto una scelta di questo esempio grafico. Non è una regola generale: è l'output head, progettato in funzione del task, a stabilire la shape della prediction.
+
+Le sezioni successive sono zoom della stessa figura:
+
+```text
+ZOOM 1    input (3,) → hidden layer con 2 neuroni
+ZOOM 2    neuroni → righe della matrice dei pesi
+ZOOM 3    hidden (2,) → output head con 3 neuroni
+```
+
+### Zoom 1: un layer, i suoi neuroni e i suoi pesi
 
 Consideriamo un layer `Linear(3, 2)`: riceve tre coordinate e possiede due neuroni di output.
 
