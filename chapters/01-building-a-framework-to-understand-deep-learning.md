@@ -227,7 +227,7 @@ Prediction + Target → Loss → Backward → Gradients → Optimizer
 
 Il forward appartiene al modello. Loss, backward e optimizer appartengono al sistema di training che usa il modello.
 
-### 1. Input
+### Input
 
 L'input `x` è l'informazione fornita alla rete. Non è ancora “conoscenza” del modello: è il dato su cui il modello deve operare.
 
@@ -247,7 +247,7 @@ fenomeno osservato → rappresentazione numerica → Tensor di input
 
 La scelta della rappresentazione determina quale struttura del dato diventa accessibile alla rete.
 
-### 2. Rappresentazione
+### Rappresentazione
 
 Una rappresentazione è l'insieme dei valori con cui la rete descrive un input in un determinato punto del forward.
 
@@ -374,7 +374,7 @@ SPAZIO DELL'OUTPUT
 
 L'output non deve in generale avere una rappresentazione congruente con l'input. Deve avere forma e semantica congruenti con il **target**.
 
-#### Esempio: regressione
+#### Esempio di regressione
 
 ```text
 input
@@ -389,7 +389,7 @@ prediction
 
 Qui input e output hanno dimensionalità e significati differenti.
 
-#### Esempio: classificazione
+#### Esempio di classificazione
 
 ```text
 input
@@ -404,7 +404,7 @@ prediction
 
 Le coordinate hidden non sono le classi. L'output head combina le 64 componenti interne per produrre i cinque valori che possiedono la semantica richiesta dal task.
 
-#### Esempio: language model
+#### Esempio di language model
 
 ```text
 ultima hidden representation di un token
@@ -558,7 +558,7 @@ Prediction Tensor ŷ, congruente con il target y
 
 Gli ingredienti minimi sono i seguenti.
 
-#### 1. Input Tensor
+#### Input Tensor
 
 L'input numerico della rete è rappresentato da un `Tensor`:
 
@@ -569,7 +569,7 @@ X.shape = (batch_size, in_features)       batch
 
 Il Tensor raccoglie le componenti dell'osservazione e costituisce la rappresentazione iniziale `h₀ = x`.
 
-#### 2. Hidden layer
+#### Hidden layer
 
 Un hidden layer è un componente interno che trasforma una rappresentazione. In una rete fully connected, cioè completamente connessa, ogni unità di output combina tutte le unità ricevute:
 
@@ -579,7 +579,7 @@ z = Wh + b
 
 È hidden perché si trova tra i confini di input e output. Il layer può possedere `Parameter`, come weight e bias.
 
-#### 3. Neuroni, unità e Tensor
+#### Neuroni, unità e Tensor
 
 Un neurone, o unità, non è normalmente rappresentato da un `Tensor` indipendente. È una singola componente di calcolo del layer:
 
@@ -717,7 +717,7 @@ ZOOM 2    neuroni → righe della matrice dei pesi
 ZOOM 3    hidden (2,) → output head con 3 neuroni
 ```
 
-### Zoom 1: un layer, i suoi neuroni e i suoi pesi
+### Primo zoom: un layer, i suoi neuroni e i suoi pesi
 
 Consideriamo un layer `Linear(3, 2)`: riceve tre coordinate e possiede due neuroni di output.
 
@@ -820,7 +820,7 @@ Il numero di neuroni è determinato da `out_features = 2`, non dal numero delle 
 
 Il bias `bⱼ` appartiene al neurone di output `j` e sposta la sua somma pesata.
 
-### Zoom 2: dai collegamenti alla matrice dei pesi
+### Secondo zoom: dai collegamenti alla matrice dei pesi
 
 Torniamo ora ai sei collegamenti tra input e hidden layer mostrati nella figura guida. Gli stessi oggetti vengono raccolti in strutture tensoriali:
 
@@ -908,7 +908,7 @@ hidden representation Tensor h
 
 Il Tensor `h` non è un singolo neurone: è la rappresentazione composta dai valori di tutti i neuroni del layer per quello specifico input.
 
-#### 4. Pre-activation Tensor
+#### Pre-activation Tensor
 
 Il risultato del calcolo parametrico prima della funzione di attivazione è:
 
@@ -918,7 +918,7 @@ z = Wh + b
 
 `z` è un Tensor intermedio. Ogni sua componente `zⱼ` è il valore pre-activation di una unità.
 
-#### 5. Activation function
+#### Activation function
 
 La funzione di attivazione trasforma `z` in una nuova rappresentazione:
 
@@ -930,7 +930,7 @@ In una rete semplice viene applicata elemento per elemento. Introduce la non-lin
 
 La funzione è un componente; `h` è il Tensor di valori che essa produce.
 
-#### 6. Hidden representation Tensor
+#### Hidden representation Tensor
 
 `h` raccoglie le activation post-attivazione delle unità del layer:
 
@@ -944,7 +944,7 @@ h = [h₀, h₁, ..., hₙ₋₁]
 h₁ → h₂ → ... → h_last
 ```
 
-#### 7. Last hidden representation
+#### Last hidden representation
 
 `h_last` è l'ultima rappresentazione interna prima dell'output head. È ancora un `Tensor`:
 
@@ -960,7 +960,7 @@ H_last.shape = (batch_size, hidden_dimension)
 
 Non è ancora necessariamente la prediction. La sua shape e le sue coordinate appartengono allo spazio interno appreso dal modello.
 
-#### 8. Output head o output layer
+#### Output head o output layer
 
 L'output head prende `h_last` e la mappa nello spazio del task:
 
@@ -983,7 +983,7 @@ language model
   hidden (d_model,) → logits (vocabulary_size,)
 ```
 
-### Zoom 3: come l'output head trasforma `(2,)` in `(3,)`
+### Terzo zoom: come l'output head trasforma `(2,)` in `(3,)`
 
 Torniamo alla parte destra della figura guida. L'ultima hidden representation ha due coordinate, mentre il task richiede tre valori di output:
 
@@ -1002,7 +1002,7 @@ La trasformazione avviene in tre passaggi:
 3. i 3 scalari prodotti diventano le coordinate di ŷ: [ŷ₀, ŷ₁, ŷ₂]
 ```
 
-#### Vista 1 — collegamenti tra coordinate e neuroni
+#### Vista dei collegamenti tra coordinate e neuroni
 
 ```mermaid
 flowchart LR
@@ -1047,7 +1047,7 @@ neurone 2 → ŷ₂
 prediction ŷ = [ŷ₀, ŷ₁, ŷ₂]
 ```
 
-#### Vista 2 — dai Tensor alla loss
+#### Vista dai Tensor alla loss
 
 ```mermaid
 flowchart LR
@@ -1060,7 +1060,7 @@ flowchart LR
 
 La hidden representation entra nel modello finale; il target non entra nell'output head. Prediction e target si incontrano soltanto nella loss.
 
-#### Vista 3 — la stessa trasformazione come algebra
+#### Vista della stessa trasformazione come algebra
 
 In forma tensoriale, la testa è un `Linear(2, 3)`:
 
@@ -1196,7 +1196,7 @@ Nel caso specifico della MSE corrente:
 prediction.shape = target.shape
 ```
 
-#### 9. Prediction Tensor
+#### Prediction Tensor
 
 La prediction è il `Tensor` finale prodotto dal modello. È l'unico valore del forward a cui il task assegna direttamente una semantica esterna:
 
@@ -1284,164 +1284,7 @@ La formulazione precisa è quindi:
 
 > L'ultima hidden representation è il valore interno che riassume, nelle coordinate apprese dal modello, l'informazione disponibile prima dell'output head. L'output head la trasforma nella prediction, la cui forma e semantica sono definite dal target del task.
 
-### Che cosa non è una hidden representation
-
-La hidden representation non è:
-
-- il layer che la produce;
-- l'insieme dei layer nascosti;
-- la configurazione architetturale della rete;
-- l'insieme dei pesi del modello;
-- un valore persistente conservato dopo ogni forward.
-
-La distinzione può essere espressa così:
-
-```text
-RETE / MODELLO
-  insieme organizzato di layer
-
-HIDDEN LAYER
-  componente interno della rete
-
-PARAMETER DEL LAYER
-  stato persistente apprendibile del componente
-
-HIDDEN REPRESENTATION
-  valore intermedio prodotto dal componente durante un forward
-```
-
-Dire che una rete “ha due hidden layer” descrive la sua architettura. Dire che, per l'input `x`, “la hidden representation è `h`” descrive il risultato di una sua esecuzione.
-
-### Non è lo stato dei layer dopo il forward
-
-La frase “stato dei layer dopo il forward” sarebbe fuorviante. Il forward normalmente non cambia lo stato apprendibile di un layer: legge i suoi parametri e produce un output.
-
-```text
-layer con Parameter θ + input x
-              ↓ forward
-hidden representation h = φ(x; θ)
-```
-
-Dopo il forward:
-
-```text
-θ    è ancora lo stato persistente del layer
-h    è il risultato intermedio di quella esecuzione
-```
-
-Se eseguiamo lo stesso layer con un altro input:
-
-```text
-hₐ = φ(xₐ; θ)
-hᵦ = φ(xᵦ; θ)
-```
-
-i parametri `θ` sono gli stessi, mentre le rappresentazioni `hₐ` e `hᵦ` sono diverse.
-
-### Hidden non significa Parameter
-
-Una rappresentazione nascosta è un **valore intermedio e transitorio della computazione**, non lo stato persistente del modello:
-
-```text
-HIDDEN REPRESENTATION
-  cambia quando cambia l'input
-  viene prodotta durante il forward
-  è un Tensor intermedio
-  può essere eliminata quando la computazione non serve più
-
-PARAMETER
-  persiste tra esempi e iterazioni
-  appartiene al modello
-  viene aggiornato dall'optimizer
-```
-
-Per input diversi, gli stessi parametri producono hidden representation diverse.
-
-Durante il training, MyTorch conserva il Tensor intermedio e i suoi collegamenti finché servono al backward. Questa conservazione tecnica non trasforma la rappresentazione in stato apprendibile: serve soltanto a ricostruire le dipendenze della computazione.
-
-### Hidden representation, hidden layer e hidden dimension
-
-I tre termini sono collegati ma non equivalenti:
-
-```text
-hidden layer
-  componente interno che applica una trasformazione
-
-hidden representation / activation
-  valori prodotti da quel componente per uno specifico input
-
-hidden dimension
-  numero di componenti della rappresentazione prodotta
-```
-
-Per esempio:
-
-```text
-Linear(1, 4)
-```
-
-può produrre, per un certo input:
-
-```text
-h = [0.7, -1.2, 0.3, 2.1]
-```
-
-Qui:
-
-- `Linear(1, 4)` è il layer;
-- `h` è la hidden representation prodotta in quel forward;
-- `4` è la hidden dimension;
-- ciascun valore di `h` è una hidden activation, cioè l'attivazione di una componente nascosta.
-
-Dopo una funzione di attivazione, i valori possono cambiare mantenendo la stessa hidden dimension:
-
-```text
-prima dell'attivazione    [0.7, -1.2, 0.3, 2.1]
-dopo ReLU                 [0.7,  0.0, 0.3, 2.1]
-```
-
-Entrambi sono Tensor intermedi; quando serve precisione, li distingueremo come pre-activation e post-activation.
-
-La parola “activation” può indicare sia la funzione di attivazione sia, per estensione, il valore che essa produce. Nel laboratorio useremo:
-
-```text
-activation function
-  la trasformazione, per esempio ReLU
-
-activation / hidden representation
-  il Tensor risultante in quel punto del forward
-```
-
-### Nota: hidden state nelle reti ricorrenti
-
-In alcune architetture, soprattutto nelle reti ricorrenti, `hidden state` ha un significato più specifico: è una rappresentazione interna che viene trasferita da un passo della sequenza al successivo.
-
-```text
-hₜ = f(xₜ, hₜ₋₁; θ)
-```
-
-Quell'uso non deve essere retroattivamente applicato alla rete feed-forward corrente. In `TinyNet`, `h` è semplicemente una rappresentazione intermedia del forward; non viene portata da un esempio o da un passo temporale al successivo.
-
-### Perché serve una rappresentazione nascosta
-
-La rappresentazione nascosta permette al modello di riorganizzare l'informazione prima di produrre l'output:
-
-```text
-input
-  descrizione disponibile del dato
-        ↓
-hidden
-  descrizione interna appresa per il task
-        ↓
-prediction
-  quantità richiesta dal task
-```
-
-La sua dimensionalità è una scelta architetturale. Una hidden dimension più ampia offre più coordinate interne con cui costruire caratteristiche utili, ma aumenta numero di parametri e costo computazionale. Non implica automaticamente una rappresentazione migliore.
-
-Un layer non “contiene” una rappresentazione in modo permanente. La produce durante il forward e la passa al layer successivo.
-
-### 3. Layer
+### Layer
 
 Un layer è un componente che trasforma una rappresentazione in un'altra:
 
@@ -1465,7 +1308,7 @@ Un layer può:
 
 In MyTorch, un layer viene implementato come un `Module`. `Module` è però più generale: può rappresentare anche un blocco composto o l'intero modello.
 
-### 4. Layer parametrico
+### Layer parametrico
 
 Un layer parametrico possiede valori che il training può modificare. Un esempio è il layer affine `Linear`:
 
@@ -1477,7 +1320,7 @@ h = Wx + b
 
 Il layer usa gli stessi parametri per tutti gli esempi che riceve. Imparare significa trovare valori di `W` e `b` che rendano utile la trasformazione per il task.
 
-### 5. Parameter
+### Parameter
 
 Un `Parameter` è un `Tensor` che appartiene allo stato apprendibile del modello.
 
@@ -1493,7 +1336,7 @@ I parametri sono presenti prima del forward, vengono letti dai layer durante il 
 
 La conoscenza appresa da una rete risiede principalmente nei valori e nelle relazioni dei suoi parametri, non nel codice della classe che descrive il modello.
 
-### 6. Funzione di attivazione
+### Funzione di attivazione
 
 Una funzione di attivazione trasforma i valori prodotti da un layer, generalmente elemento per elemento. Il suo ruolo principale è introdurre non-linearità.
 
@@ -1512,7 +1355,7 @@ Nel capitolo 2 introdurremo `ReLU` — Rectified Linear Unit — definita da `ma
 layer parametrico → activation non lineare → nuovo layer
 ```
 
-### 7. Blocco
+### Blocco
 
 Un blocco è una composizione riutilizzabile di più layer e operazioni. Introduce un livello di organizzazione intermedio:
 
@@ -1527,7 +1370,7 @@ Model
 
 Nelle reti semplici possiamo comporre direttamente i layer. Nelle architetture moderne, come i Transformer, il blocco diventa l'unità strutturale ripetuta molte volte.
 
-### 8. Modello o rete
+### Modello o rete
 
 Il modello è la composizione completa che mappa input in prediction:
 
@@ -1546,7 +1389,7 @@ Il modello stabilisce:
 
 Il modello non decide autonomamente quale prediction sia corretta e non aggiorna da solo i propri parametri.
 
-### 9. Prediction
+### Prediction
 
 La prediction `ŷ` è l'output prodotto dal modello per un input. La sua interpretazione dipende dal task:
 
@@ -1557,7 +1400,7 @@ La prediction `ŷ` è l'output prodotto dal modello per un input. La sua interpr
 
 La prediction è il confine di responsabilità del modello. Durante il training conserva però il collegamento computazionale ai layer e ai parametri che l'hanno prodotta.
 
-### 10. Target
+### Target
 
 Il target `y` è il riferimento rispetto al quale viene valutata la prediction nel training supervisionato.
 
@@ -1568,7 +1411,7 @@ target y        ciò che il dataset richiede
 
 Il target non è prodotto dal modello e normalmente non è apprendibile. Proviene dai dati o dalla costruzione del task.
 
-### 11. Loss
+### Loss
 
 La loss trasforma il confronto tra prediction e target in un obiettivo numerico, generalmente scalare:
 
@@ -1580,7 +1423,7 @@ La loss definisce che cosa significhi “errore” per il task. Cambiare loss pu
 
 La loss non aggiorna i parametri. Costruisce la quantità rispetto alla quale verranno calcolati i gradienti.
 
-### 12. Forward
+### Forward
 
 Il forward è l'esecuzione del modello dall'input alla prediction:
 
@@ -1597,7 +1440,7 @@ Durante il forward:
 
 “Forward” indica quindi sia la direzione concettuale del calcolo sia il metodo con cui un `Module` definisce la propria trasformazione.
 
-### 13. Computational graph
+### Computational graph
 
 Il grafo computazionale è la storia delle operazioni che hanno prodotto la prediction e, successivamente, la loss.
 
@@ -1607,7 +1450,7 @@ Tensor e Parameter → Operations → Tensor intermedi → prediction → loss
 
 Non coincide con il diagramma dei layer. Il diagramma dei layer descrive la struttura del modello; il grafo descrive una sua esecuzione concreta e contiene il dettaglio necessario per il backward.
 
-### 14. Backward e Autograd
+### Backward e Autograd
 
 Il backward percorre il grafo dalla loss verso gli input e i parametri. `Autograd`, abbreviazione di automatic differentiation, è il meccanismo che coordina questa propagazione automatica delle derivate locali.
 
@@ -1617,7 +1460,7 @@ loss → prediction → hidden representations → Parameter
 
 Il backward calcola gradienti. Non modifica ancora i parametri.
 
-### 15. Gradiente
+### Gradiente
 
 Per un parametro `θ`, il gradiente
 
@@ -1629,7 +1472,7 @@ misura la sensibilità locale della loss rispetto a una variazione del parametro
 
 Il gradiente è informazione sul cambiamento della loss; non è di per sé una regola di aggiornamento.
 
-### 16. Optimizer
+### Optimizer
 
 L'optimizer legge parametri e gradienti e applica una strategia di aggiornamento. Nella forma più semplice della discesa del gradiente:
 
@@ -1646,7 +1489,7 @@ L'optimizer:
 - non calcola il gradiente;
 - modifica lo stato apprendibile usando gradienti già calcolati.
 
-### 17. Iterazione di training
+### Iterazione di training
 
 Una singola iterazione completa è:
 

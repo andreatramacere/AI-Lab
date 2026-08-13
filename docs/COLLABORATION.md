@@ -240,6 +240,33 @@ La struttura dei capitoli segue sempre la MAP.
 
 L'ordine di esposizione è determinato dalla struttura concettuale del laboratorio e non dall'ordine del codice sorgente.
 
+## Regola — Gerarchia e numerazione dei capitoli
+
+La gerarchia Markdown deve distinguere chiaramente struttura editoriale e sequenze didattiche:
+
+```text
+# 01 — Titolo del capitolo
+
+## Scopo / Zoom out iniziale
+  sezioni di cornice non numerate
+
+## 1.1 Titolo della sezione
+  sezione concettuale principale numerata
+
+### Titolo della sottosezione
+  sottosezione descrittiva non numerata
+
+#### Titolo dell'approfondimento
+  dettaglio locale non numerato
+
+## Ricomposizione / Sintesi
+  sezioni conclusive non numerate
+```
+
+Solo le sezioni concettuali principali di livello `##` usano la numerazione del capitolo. Le sottosezioni non devono introdurre sequenze concorrenti come `### 1.`, `### 2.` o `#### 1.`.
+
+Quando serve descrivere una sequenza, si usa una lista numerata nel corpo del testo oppure titoli verbali come “Primo zoom”, senza confonderla con la gerarchia delle sezioni.
+
 
 ## Il codice supporta la spiegazione
 

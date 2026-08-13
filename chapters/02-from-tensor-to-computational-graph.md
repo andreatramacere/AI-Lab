@@ -1175,7 +1175,7 @@ loss.backward()                  percorre il grafo e accumula gradienti
 optimizer.step()                 modifica lo stato apprendibile
 ```
 
-### 1. Stato iniziale
+### Stato iniziale
 
 Prima del forward esistono già:
 
@@ -1201,7 +1201,7 @@ parameter.grad    diventa None
 
 Questa chiamata stabilisce il confine tra due raccolte di contributi al gradiente. Il motivo dell'accumulazione e le possibili strategie alternative saranno sviluppati nel capitolo 3.
 
-### 2. Il modello produce la prediction
+### Il modello produce la prediction
 
 La chiamata
 
@@ -1245,7 +1245,7 @@ Parameter
 
 Quindi “il modello termina alla prediction” descrive un **confine di responsabilità**, non un'interruzione del grafo.
 
-### 3. La loss prolunga il grafo
+### La loss prolunga il grafo
 
 La chiamata
 
@@ -1286,7 +1286,7 @@ La loss è scalare. Questo fornisce una singola quantità rispetto alla quale es
 ∂loss/∂bias₂
 ```
 
-### 4. Il backward interroga la storia del forward
+### Il backward interroga la storia del forward
 
 La chiamata
 
@@ -1325,7 +1325,7 @@ parameter.grad    contiene ∂loss/∂parameter
 
 Questo punto è essenziale: **il backward non addestra ancora il modello** nel senso di modificarne i pesi. Calcola l'informazione necessaria a una successiva regola di ottimizzazione.
 
-### 5. L'optimizer muta i parametri
+### L'optimizer muta i parametri
 
 La chiamata
 
@@ -1351,7 +1351,7 @@ Optimizer
 
 Lo stesso grafo e gli stessi gradienti potrebbero essere utilizzati da una diversa regola di ottimizzazione. Analogamente, SGD non ha bisogno di conoscere se il gradiente provenga da una MSE, da un'altra loss o da una particolare architettura.
 
-### 6. Perché serve un nuovo forward
+### Perché serve un nuovo forward
 
 Dopo `optimizer.step()`, la prediction già calcolata non cambia retroattivamente. È un `Tensor` contenente il risultato ottenuto con i vecchi valori dei parametri.
 
