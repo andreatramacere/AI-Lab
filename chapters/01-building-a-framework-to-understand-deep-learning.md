@@ -20,6 +20,29 @@ sistemi di Deep Learning reali
 
 MyTorch è il laboratorio in cui queste relazioni vengono rese visibili.
 
+## Zoom out iniziale: dalla AI moderna al componente
+
+La destinazione di lungo periodo è un sistema AI specializzato; MyTorch occupa il livello fondazionale di questa traiettoria:
+
+```text
+SISTEMA AI ESPERTO
+  usa un Language Model dentro dati, retrieval e valutazione
+        ↑
+LANGUAGE MODEL / TRANSFORMER
+  compone blocchi, attention e rappresentazioni di token
+        ↑
+RETE NEURALE
+  compone layer e Parameter in una funzione apprendibile
+        ↑
+FRAMEWORK
+  fornisce Tensor, Operations, Autograd, Module e Optimizer
+        ↑
+MYTORCH
+  rende espliciti i contratti minimi del framework
+```
+
+Questo capitolo mantiene lo zoom più ampio: osserva prima la rete e il sistema di training come oggetti completi. I capitoli successivi scenderanno progressivamente nei sottosistemi, ma dovranno sempre ritornare a questa vista per mostrare che cosa il nuovo componente ha reso possibile.
+
 ---
 
 ## 1.1 Perché costruire MyTorch
@@ -162,7 +185,102 @@ Questa non è una semplice lista di classi. È una decomposizione delle responsa
 
 ---
 
-## 1.4 I tre livelli di lettura
+## 1.4 Anatomia generale di una rete neurale
+
+Prima di scomporre il framework nei suoi componenti, osserviamo l'oggetto complessivo che vogliamo costruire.
+
+Una rete neurale trasforma una rappresentazione in una nuova rappresentazione attraverso una composizione di layer:
+
+```text
+Input
+  ↓
+Layer di ingresso
+  ↓
+Rappresentazione nascosta
+  ↓
+uno o più layer / blocchi
+  ↓
+Rappresentazione di output
+  ↓
+Prediction
+```
+
+Se `h₀ = x`, possiamo scrivere:
+
+```text
+h₁ = φ₁(h₀; θ₁)
+h₂ = φ₂(h₁; θ₂)
+ ...
+ŷ  = φₙ(hₙ₋₁; θₙ)
+```
+
+La rete completa è la composizione:
+
+```text
+f(x; θ) = φₙ ∘ ... ∘ φ₂ ∘ φ₁(x)
+```
+
+Un layer riceve un `Tensor` e produce un altro `Tensor`. Può possedere `Parameter`, come `Linear`, oppure essere privo di stato apprendibile, come `ReLU`. Un blocco combina più layer; un modello combina layer e blocchi per produrre la prediction.
+
+La stessa rete deve essere letta da quattro prospettive.
+
+### Matematica: composizione di funzioni
+
+```text
+x → φ₁ → h₁ → φ₂ → h₂ → ... → ŷ
+```
+
+Ogni funzione trasforma la rappresentazione ricevuta. Le non-linearità impediscono alla composizione di collassare in un'unica trasformazione affine.
+
+### Architettura software: gerarchia di componenti
+
+```text
+Model : Module
+├── Layer : Module
+├── Activation : Module
+└── Block : Module
+    ├── Layer : Module
+    └── Activation : Module
+```
+
+`Module` fornisce un'interfaccia uniforme a layer elementari, blocchi composti e modello completo.
+
+### Stato: insieme dei valori apprendibili
+
+```text
+Model
+├── Parameter θ₁
+├── Parameter θ₂
+└── Parameter θₙ
+```
+
+La struttura del modello stabilisce quali parametri esistono e chi li possiede. Il training modifica i loro valori, non la topologia della rete.
+
+### Esecuzione: una computazione concreta
+
+Durante il forward, layer e operazioni producono Tensor intermedi e costruiscono un grafo dinamico:
+
+```text
+Parameter ─┐
+Input ─────┴→ Operations → hidden → Operations → prediction
+```
+
+La gerarchia del modello esiste prima del forward; il grafo computazionale registra una specifica esecuzione. Autograd percorre quest'ultimo per collegare la loss ai parametri posseduti dalla prima.
+
+Le quattro prospettive descrivono lo stesso oggetto, ma rispondono a domande differenti:
+
+| Prospettiva | Domanda |
+|---|---|
+| Matematica | Quale funzione viene composta? |
+| Architettura | Quali componenti formano il modello? |
+| Stato | Quali valori devono essere appresi? |
+| Esecuzione | Quali operazioni sono avvenute in questo forward? |
+
+I capitoli successivi effettueranno un deep dive nei singoli elementi, per poi ricomporli ogni volta in questa anatomia generale.
+
+---
+
+## 1.5 I tre livelli di lettura
 
 Ogni concetto del laboratorio può essere osservato almeno a tre livelli.
 
@@ -219,7 +337,7 @@ Nel laboratorio segnaleremo esplicitamente i cambi di livello.
 
 ---
 
-## 1.5 I livelli architetturali di MyTorch
+## 1.6 I livelli architetturali di MyTorch
 
 La MAP raggruppa i componenti correnti in tre livelli.
 
@@ -270,7 +388,7 @@ L'apprendimento emerge dalla cooperazione tra questi livelli. Non risiede in una
 
 ---
 
-## 1.6 Struttura stabile e computazione dinamica
+## 1.7 Struttura stabile e computazione dinamica
 
 Due tipi di struttura attraverseranno tutto il laboratorio.
 
@@ -307,7 +425,7 @@ Comprendere questa distinzione impedisce di confondere la rete come oggetto soft
 
 ---
 
-## 1.7 Che cosa MyTorch rende intenzionalmente semplice
+## 1.8 Che cosa MyTorch rende intenzionalmente semplice
 
 MyTorch non è una libreria numerica di produzione. Alcune limitazioni sono deliberate:
 
@@ -337,7 +455,7 @@ generalizzazione controllata
 
 ---
 
-## 1.8 MyTorch e PyTorch
+## 1.9 MyTorch e PyTorch
 
 MyTorch e PyTorch non sono alternative concorrenti nel percorso.
 
@@ -371,7 +489,7 @@ MyTorch rimarrà disponibile anche dopo l'introduzione di PyTorch. Quando un'ast
 
 ---
 
-## 1.9 Dalla rete neurale al modello esperto
+## 1.10 Dalla rete neurale al modello esperto
 
 La direzione di lungo periodo del laboratorio è costruire sistemi linguistici specializzati, con particolare attenzione ai domini scientifici.
 
@@ -415,7 +533,7 @@ MyTorch renderà comprensibili i componenti fondamentali. PyTorch e gli strument
 
 ---
 
-## 1.10 Come leggere i capitoli successivi
+## 1.11 Come leggere i capitoli successivi
 
 Ogni nuovo nodo dovrebbe rispondere a quattro domande:
 
@@ -444,6 +562,26 @@ Tensor → Operation → Computational Graph → Autograd
 e mostra come, sopra quel core, emergano `Parameter`, `Module`, layer e modello.
 
 ---
+
+## Ricomposizione: dalla rete ai componenti
+
+Siamo partiti dalla rete completa e l'abbiamo osservata come funzione, gerarchia, stato ed esecuzione. MyTorch la scompone non perché questi aspetti siano indipendenti, ma perché possano cooperare attraverso contratti espliciti:
+
+```text
+RETE NEURALE
+  composizione di trasformazioni parametriche
+        ↓ viene rappresentata da
+MODEL / MODULE
+  gerarchia che possiede layer e Parameter
+        ↓ durante il forward genera
+COMPUTATIONAL GRAPH
+  storia delle Operations applicate ai Tensor
+        ↓ permette
+AUTOGRAD + OPTIMIZER
+  calcolo dei gradienti e aggiornamento dello stato
+```
+
+Il capitolo 2 effettuerà il primo deep dive nel core computazionale. L'oggetto finale da ricordare rimane però la rete: Tensor, Operation e grafo sono l'infrastruttura che consente ai suoi layer di comporsi e apprendere.
 
 ## Sintesi del capitolo
 

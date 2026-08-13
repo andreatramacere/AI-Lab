@@ -24,6 +24,38 @@ Prediction → Loss → Backward → Gradients → Optimizer → Parameter Updat
 
 Ne incontreremo alcuni elementi per verificare che l'architettura funzioni, senza confonderli con il modello.
 
+### Zoom out: quale parte della rete stiamo costruendo
+
+Nel capitolo 1 la rete è apparsa come:
+
+```text
+Input → Layer → Rappresentazione nascosta → Layer → Prediction
+```
+
+Ora ingrandiamo ciò che avviene **dentro e sotto ogni freccia**. Quando un layer trasforma una rappresentazione, non manipola simboli astratti: riceve `Tensor`, applica `Operation` e produce nuovi `Tensor`. La sequenza delle operazioni forma il grafo che Autograd percorrerà.
+
+```text
+VISTA DELLA RETE
+Input ─────→ Layer ─────→ Hidden
+
+ZOOM NEL LAYER
+Tensor → MatMul → Tensor → Add → Tensor → ReLU → Tensor
+          ↑                ↑
+       Parameter        Parameter
+```
+
+Il capitolo attraversa quindi due sottosistemi collegati:
+
+```text
+INFRASTRUTTURA DI ESECUZIONE
+Tensor → Operation → Graph → Autograd
+                ↓ sostiene
+STRUTTURA DELLA RETE
+Parameter → Module / Layer → Model
+```
+
+Il deep dive deve rispondere a una domanda precisa: **come può una gerarchia di layer diventare una computazione differenziabile senza assegnare a ogni layer un sistema di gradienti separato?**
+
 ---
 
 ## 2.1 Tensor: il valore che attraversa il sistema
@@ -1240,6 +1272,50 @@ Questi confini permettono di sostituire un componente senza riscrivere gli altri
 Il modello termina dunque concettualmente alla `Prediction`. La loss collega quella prediction a un criterio; Autograd traduce il criterio in gradienti; l'optimizer traduce i gradienti in una mutazione dello stato apprendibile. Il capitolo 3 analizzerà quantitativamente questo ciclo mediante un passo SGD completo.
 
 ---
+
+## Ricomposizione: dal core alla rete
+
+Ritorniamo ora all'anatomia generale introdotta nel capitolo 1.
+
+```text
+MATEMATICA
+la rete compone trasformazioni come Wx+b e ReLU
+
+ARCHITETTURA SOFTWARE
+Linear e ReLU sono Module; TinyNet li organizza in una gerarchia
+
+STATO
+weight e bias sono Parameter posseduti dai Linear
+
+ESECUZIONE
+il forward traduce la gerarchia in un grafo di Operations
+```
+
+Le due strutture cooperano senza coincidere:
+
+```text
+TinyNet stabile
+├── Linear
+├── ReLU
+└── Linear
+        │ forward
+        ↓
+grafo dinamico
+MatMul → Add → ReLU → MatMul → Add
+```
+
+Il risultato architetturale del capitolo non è soltanto una collezione di classi. È un modello capace di produrre una prediction attraverso un grafo differenziabile. Ciò che manca ancora è usare quel grafo per trasformare una valutazione della prediction in un cambiamento persistente dei parametri: questo è il sottosistema del training loop, sviluppato nel capitolo 3.
+
+Nella MAP ci troviamo qui:
+
+```text
+Tensor → Operation → Graph → Autograd
+                              ↓
+Parameter → Module → Model → Prediction
+                              ↓
+                         prossimo zoom:
+                 Loss → Backward → Optimizer
+```
 
 ## Sintesi del capitolo
 

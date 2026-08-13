@@ -76,11 +76,69 @@ Fanno eccezione solo:
 
 - i termini inglesi ormai standard quando la traduzione sarebbe fuorviante.
 
-## Regola — Zoom Out
+## Regola — Zoom Out / Deep Dive / Zoom Out
 
 La mappa è spaziale, non temporale.
 
 Non esiste un "prima" e un "dopo" assoluto imposto dalla mappa. Prima di entrare nel dettaglio di un componente, individuiamo dove si trova, da cosa dipende, cosa utilizza e chi dipende da lui. Possiamo entrare da qualunque nodo purché manteniamo il contesto architetturale.
+
+Ogni nuovo concetto e ogni capitolo devono seguire questa sequenza:
+
+```text
+MAPPA GLOBALE
+    ↓
+ZOOM OUT SUL SOTTOSISTEMA
+    ↓
+DEEP DIVE SUL COMPONENTE
+    ↓
+RICOMPOSIZIONE NEL SOTTOSISTEMA
+    ↓
+RITORNO ALLA MAPPA GLOBALE
+```
+
+### Prima del deep dive
+
+Prima di analizzare il componente bisogna chiarire:
+
+- dove si colloca nella MAP;
+- quale problema del sistema risolve;
+- da quali componenti dipende;
+- quale livello di astrazione stiamo osservando;
+- che cosa renderà possibile ai livelli successivi.
+
+Il lettore deve vedere la casa e la stanza prima di esaminare il singolo mattone.
+
+### Dopo il deep dive
+
+Dopo l'analisi bisogna ricomporre il componente nel sistema, chiarendo:
+
+- che cosa è stato aggiunto all'architettura;
+- come coopera con i componenti già introdotti;
+- quali responsabilità rimangono separate;
+- quale limite architetturale resta aperto;
+- dove ci troviamo nuovamente nella MAP.
+
+La sintesi non deve limitarsi a elencare definizioni: deve ricostruire le relazioni e il flusso complessivo.
+
+### Quattro prospettive sulla rete neurale
+
+Quando si parla di una rete o di un suo componente, la spiegazione deve distinguere e poi ricomporre almeno quattro prospettive:
+
+```text
+MATEMATICA
+composizione di funzioni parametriche
+
+ARCHITETTURA SOFTWARE
+gerarchia di Module, layer e blocchi
+
+STATO
+insieme dei Parameter apprendibili
+
+ESECUZIONE
+forward dinamico e grafo computazionale
+```
+
+Il capitolo introduttivo presenta sempre l'architettura complessiva della rete. I capitoli successivi possono così effettuare deep dive sui componenti senza perdere l'oggetto finale che stanno costruendo.
 
 ## La MAP guida il libro
 

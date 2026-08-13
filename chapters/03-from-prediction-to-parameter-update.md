@@ -29,6 +29,41 @@ Attraverseremo tre livelli di astrazione, segnalandone i confini:
 - **architettura**: separiamo modello, autograd e optimizer;
 - **implementazione**: seguiamo gli oggetti reali di MyTorch durante un passo di training.
 
+### Zoom out: la rete dentro un sistema di apprendimento
+
+Una rete neurale isolata realizza il contratto:
+
+```text
+input → model(parameters) → prediction
+```
+
+Il training la colloca in un sistema più ampio:
+
+```text
+                 ┌──────── MODELLO ────────┐
+input ──────────→│ parameters → prediction │
+                 └──────────────┬──────────┘
+                                ↓
+target ───────────────────────→ loss
+                                ↓
+                           gradients
+                                ↓
+                         parameter update
+                                │
+                                └────→ MODELLO modificato
+```
+
+Il deep dive non introduce un nuovo tipo di rete. Spiega il ciclo esterno che ne modifica lo stato. La topologia dei `Module` rimane stabile; cambiano i valori dei `Parameter`.
+
+Le quattro prospettive si distribuiscono così:
+
+```text
+MATEMATICA       obiettivo scalare e discesa del gradiente
+ARCHITETTURA     separazione Model / Loss / Autograd / Optimizer
+STATO            data e grad dei Parameter
+ESECUZIONE       forward → backward → step → nuovo forward
+```
+
 ---
 
 ## 3.1 Prediction e target non hanno lo stesso ruolo
@@ -407,6 +442,38 @@ Broadcasting → Batch → MatMul generale → Vectorization
 Prima di introdurre ottimizzatori più sofisticati o architetture più profonde, occorre capire come le stesse responsabilità si conservano quando una singola osservazione diventa un batch e le operazioni devono gestire forme più generali.
 
 ---
+
+## Ricomposizione: il modello che apprende
+
+Il training loop ricompone i componenti senza fondere le loro responsabilità:
+
+```text
+MODEL
+  legge Parameter e produce prediction
+        ↓
+LOSS
+  collega prediction e target in un obiettivo scalare
+        ↓
+AUTOGRAD
+  usa il grafo per scrivere i gradienti nei Parameter
+        ↓
+OPTIMIZER
+  usa i gradienti per modificare i valori dei Parameter
+        ↓
+MODEL
+  mantiene la stessa struttura ma produce un nuovo comportamento
+```
+
+Rispetto all'anatomia della rete:
+
+```text
+matematica      la funzione f(x; θ) conserva la forma, cambia θ
+architettura    la gerarchia dei Module non cambia
+stato           parameter.data viene aggiornato
+esecuzione      ogni iterazione costruisce un nuovo grafo
+```
+
+Abbiamo così chiuso il primo sistema di apprendimento completo. Il limite successivo non riguarda più la presenza del ciclo, ma la scala su cui viene eseguito: le operazioni lavorano ancora su shape molto ristrette. I capitoli 4 e 5 ingrandiscono quindi l'infrastruttura tensoriale senza alterare i confini appena consolidati.
 
 ## Sintesi del capitolo
 

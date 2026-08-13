@@ -25,6 +25,45 @@ Attraverseremo tre livelli:
 - **calcolo**: vedremo come un valore viene riutilizzato nel forward;
 - **autograd**: capiremo perché il riutilizzo diventa una somma nel backward.
 
+### Zoom out: che cosa cambia nella rete e che cosa non cambia
+
+La rete continua ad avere la stessa anatomia:
+
+```text
+Input → Layer → Hidden → Layer → Prediction
+```
+
+Il broadcasting non aggiunge un nuovo layer e non modifica la gerarchia del modello. Generalizza il contratto delle `Operation` usate **dentro** i layer:
+
+```text
+PRIMA
+Add: Tensor(shape=S) + Tensor(shape=S)
+
+DOPO
+Add: Tensor(shape=A) + Tensor(shape=B)
+     se A e B sono broadcast-compatible
+```
+
+L'esempio architetturale guida è il bias condiviso:
+
+```text
+attivazioni  (batch, features)
+bias                (features,)
+                         ↓ broadcasting
+output        (batch, features)
+```
+
+Le quattro prospettive sono:
+
+```text
+MATEMATICA       corrispondenza tra indici e somma dei contributi
+ARCHITETTURA     contratto comune delle Operations element-wise
+STATO            un Parameter può essere riusato su più posizioni
+ESECUZIONE       espansione nel forward, riduzione nel backward
+```
+
+Il deep dive risolve dunque un problema del core che diventerà necessario per eseguire la stessa rete su un batch.
+
 ---
 
 ## 4.1 La shape è un contratto
@@ -529,6 +568,41 @@ batch:         (batch_size, in_features)
 Questo richiederà di generalizzare `MatMul` e di scegliere con precisione l'orientamento delle dimensioni nel `Linear`. Il broadcasting del bias, invece, è già risolto.
 
 ---
+
+## Ricomposizione: broadcasting dentro la rete
+
+Ricomponiamo il meccanismo nel caso di un layer:
+
+```text
+Linear
+├── MatMul produce attivazioni
+└── Add applica bias
+        ↓
+Broadcasting riusa lo stesso bias
+        ↓
+Autograd somma nel bias i gradienti di tutti i riusi
+```
+
+Il broadcasting preserva i quattro aspetti della rete:
+
+```text
+matematica      la trasformazione affine rimane y = Wx+b
+architettura    Linear rimane un Module con weight e bias
+stato           esiste un solo bias Parameter condiviso
+esecuzione      Add gestisce shape diverse e riduce il gradiente
+```
+
+Non abbiamo ancora eseguito davvero un batch attraverso `Linear`, perché `MatMul` supporta ancora soltanto matrice-vettore. Abbiamo però preparato metà del contratto: l'aggiunta del bias è già corretta per `(batch, features) + (features,)`.
+
+Nella MAP:
+
+```text
+Shape → Broadcasting
+              ↓ abilita
+Batch → MatMul generale → Linear batched
+```
+
+Il capitolo 5 completa questa ricomposizione generalizzando la contrazione matriciale.
 
 ## Sintesi del capitolo
 

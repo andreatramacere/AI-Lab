@@ -20,6 +20,41 @@ x.shape = (features,)           X.shape = (batch_size, features)
 
 Un batch non introduce un nuovo tipo di dato. Introduce un asse che organizza più esempi omogenei nello stesso `Tensor`. Perché il modello possa elaborarli insieme, `MatMul`, `Linear`, broadcasting del bias e loss devono concordare sulla semantica delle shape.
 
+### Zoom out: dalla rete sul singolo esempio alla stessa rete sul batch
+
+Sul singolo esempio, il modello applica:
+
+```text
+x (features,) → Linear → h (hidden,) → ... → prediction (out,)
+```
+
+Sul batch vogliamo applicare **gli stessi layer e gli stessi Parameter** a più righe:
+
+```text
+X (batch, features) → Linear → H (batch, hidden)
+                             → ...
+                             → prediction (batch, out)
+```
+
+Non costruiamo una rete per ogni esempio:
+
+```text
+NO:  model₀(x₀), model₁(x₁), model₂(x₂)
+
+SÌ:  lo stesso model e gli stessi Parameter operano su X
+```
+
+Il cambiamento appartiene soprattutto all'esecuzione:
+
+```text
+MATEMATICA       la stessa funzione viene applicata a ogni esempio
+ARCHITETTURA     la gerarchia di Module rimane invariata
+STATO            weight e bias rimangono condivisi
+ESECUZIONE       compare l'asse batch e MatMul lavora su matrici
+```
+
+Il deep dive deve mostrare come preservare questa equivalenza e come aggregare nel backward i contributi di tutti gli esempi.
+
 ---
 
 ## 5.1 Perché introdurre il batch
@@ -564,6 +599,58 @@ implementazione PyTorch vettorizzata
 ```
 
 ---
+
+## Ricomposizione: la rete batched
+
+Possiamo ora rileggere l'intera rete senza entrare nei loop di `MatMul`:
+
+```text
+X (batch, in)
+  ↓
+Linear: X @ W₁ᵀ + b₁
+  ↓
+H (batch, hidden)
+  ↓
+ReLU
+  ↓
+H' (batch, hidden)
+  ↓
+Linear: H' @ W₂ᵀ + b₂
+  ↓
+Prediction (batch, out)
+  ↓
+MSE media su batch × out
+  ↓
+Loss scalare
+```
+
+Nel backward:
+
+```text
+ogni riga riceve il proprio gradiente rispetto all'input
+                    +
+tutte le righe contribuiscono agli stessi weight e bias
+```
+
+Le quattro prospettive tornano a coincidere sull'oggetto completo:
+
+```text
+matematica      f viene applicata a più osservazioni
+architettura    il modello contiene gli stessi layer
+stato           i Parameter sono condivisi dal batch
+esecuzione      MatMul e broadcasting elaborano l'asse aggiuntivo
+```
+
+Il batch è quindi una generalizzazione dell'esecuzione, non una nuova architettura di rete. Il prossimo limite è che MyTorch realizza questa algebra con liste e loop Python. La semantica è ora sufficientemente stabile per confrontarla con un backend vettorizzato e, successivamente, con PyTorch.
+
+Nella MAP:
+
+```text
+Shape → Broadcasting → Batch → MatMul 1D/2D
+                                      ↓
+                              prossimo zoom:
+                    Vectorization → Backend → PyTorch
+```
 
 ## Sintesi del capitolo
 
