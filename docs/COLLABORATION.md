@@ -64,11 +64,31 @@ Ogni informazione deve essere inserita nella sua sede naturale:
 
 Solo dopo il consolidamento viene generato uno snapshot del laboratorio in formato `AI-Lab-YYYY-MM-DD.tar.gz`, escludendo la directory `.git/`.
 
-## Lingua 
- quando scrivi nel repo, eccetto COLLABORATION.md, tutta va in Inglese
+## Lingua del laboratorio
+
+L'intero laboratorio è scritto in italiano.
+
+Fanno eccezione solo:
+
+- il codice sorgente;
+
+- i nomi delle classi, delle funzioni e delle API;
+
+- i termini inglesi ormai standard quando la traduzione sarebbe fuorviante.
 
 ## Regola — Zoom Out
 
 La mappa è spaziale, non temporale.
 
 Non esiste un "prima" e un "dopo" assoluto imposto dalla mappa. Prima di entrare nel dettaglio di un componente, individuiamo dove si trova, da cosa dipende, cosa utilizza e chi dipende da lui. Possiamo entrare da qualunque nodo purché manteniamo il contesto architetturale.
+
+## Spiegazione basata sul codice
+
+Quando viene spiegato un componente già implementato nel repository,
+la spiegazione deve sempre essere accompagnata da uno snippet del codice
+presente nel progetto.
+
+Lo snippet deve essere il più piccolo possibile e contenere solo le
+righe realmente necessarie a comprendere il concetto.
+
+La teoria deve spiegare il codice, non sostituirlo.
