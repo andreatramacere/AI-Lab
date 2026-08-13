@@ -801,14 +801,6 @@ z₀ = W₀₀x₀ + W₀₁x₁ + W₀₂x₂ + b₀
 z₁ = W₁₀x₀ + W₁₁x₁ + W₁₂x₂ + b₁
 ```
 
-La scrittura
-
-```text
-xᵢ ── Wⱼᵢ ──→ neurone j
-```
-
-descrive **una singola freccia generica**, non una coppia esclusiva tra `xᵢ` e il neurone `j`.
-
 Gli indici variano indipendentemente:
 
 ```text
@@ -828,9 +820,9 @@ Il numero di neuroni è determinato da `out_features = 2`, non dal numero delle 
 
 Il bias `bⱼ` appartiene al neurone di output `j` e sposta la sua somma pesata.
 
-#### Lettura come Tensor e matrice
+### Zoom 2: dai collegamenti alla matrice dei pesi
 
-Gli stessi oggetti vengono raccolti in strutture tensoriali:
+Torniamo ora ai sei collegamenti tra input e hidden layer mostrati nella figura guida. Gli stessi oggetti vengono raccolti in strutture tensoriali:
 
 ```text
 x = [x₀, x₁, x₂]                    shape (3,)
@@ -991,9 +983,9 @@ language model
   hidden (d_model,) → logits (vocabulary_size,)
 ```
 
-### Schema grafico: come una testa trasforma `(2,)` in `(3,)`
+### Zoom 3: come l'output head trasforma `(2,)` in `(3,)`
 
-Supponiamo che l'ultima hidden representation abbia due coordinate, mentre il task richieda tre valori di output:
+Torniamo alla parte destra della figura guida. L'ultima hidden representation ha due coordinate, mentre il task richiede tre valori di output:
 
 ```text
 h_last.shape = (2,)
