@@ -64,6 +64,43 @@ ESECUZIONE       espansione nel forward, riduzione nel backward
 
 Il deep dive risolve dunque un problema del core che diventerà necessario per eseguire la stessa rete su un batch.
 
+### Diagramma del sottosistema
+
+```mermaid
+flowchart LR
+    A[Tensor A<br/>shape A] --> C{Compatibilità<br/>delle shape}
+    B[Tensor B<br/>shape B] --> C
+    C -->|compatibili| F[Broadcast forward]
+    C -->|incompatibili| E[ValueError]
+    F --> O[Output<br/>shape comune]
+    O --> D[Operazioni successive / Loss]
+    D --> GO[grad_output<br/>shape comune]
+    GO --> R[Reduce broadcast gradient]
+    R --> GA[grad_A<br/>shape A]
+    R --> GB[grad_B<br/>shape B]
+```
+
+Gli ingredienti concettuali sono:
+
+1. **Shape** — contratto che descrive gli assi di un Tensor.
+2. **Asse** — posizione dimensionale lungo cui sono organizzati gli elementi.
+3. **Operazione element-wise** — combina elementi messi in corrispondenza, come `Add` o `Multiply`.
+4. **Compatibilità** — regola che decide se due dimensioni uguali o singleton possono essere allineate.
+5. **Dimensione singleton** — asse di ampiezza `1`, il cui unico valore può essere riusato.
+6. **Broadcasting** — espansione logica di un operando senza copia preventiva completa.
+7. **Shape di output** — dominio comune su cui viene eseguita l'operazione.
+8. **Riduzione del gradiente** — somma dei contributi sugli assi riusati nel forward.
+9. **Parametro condiviso** — caso architetturale in cui lo stesso valore, come un bias, partecipa a più posizioni.
+
+La dualità da conservare durante tutto il capitolo è:
+
+```text
+FORWARD                          BACKWARD
+uno stesso valore viene riusato  i contributi dei riusi vengono sommati
+```
+
+Il broadcasting appartiene al core delle Operations; il bias di un layer è il primo caso della rete in cui ne vediamo chiaramente la necessità.
+
 ---
 
 ## 4.1 La shape è un contratto
@@ -572,6 +609,18 @@ Questo richiederà di generalizzare `MatMul` e di scegliere con precisione l'ori
 ## Ricomposizione: broadcasting dentro la rete
 
 Ricomponiamo il meccanismo nel caso di un layer:
+
+```mermaid
+flowchart LR
+    X[Attivazioni<br/>batch × features] --> A[Add]
+    B[(Bias Parameter<br/>features)] --> A
+    A --> Y[Output<br/>batch × features]
+    Y --> L[Loss]
+    L --> GO[grad_output]
+    GO --> RX[grad attivazioni]
+    GO --> RB[Reduce asse batch]
+    RB --> GB[grad bias<br/>features]
+```
 
 ```text
 Linear

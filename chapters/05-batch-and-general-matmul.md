@@ -55,6 +55,56 @@ ESECUZIONE       compare l'asse batch e MatMul lavora su matrici
 
 Il deep dive deve mostrare come preservare questa equivalenza e come aggregare nel backward i contributi di tutti gli esempi.
 
+### Diagramma del sottosistema
+
+```mermaid
+flowchart LR
+    X[Batch X<br/>batch × in] --> MM1[MatMul<br/>X @ W₁ᵀ]
+    W1[(weight₁<br/>hidden × in)] --> TR1[Transpose] --> MM1
+    MM1 --> ADD1[Add bias₁]
+    B1[(bias₁<br/>hidden)] --> ADD1
+    ADD1 --> H[Hidden<br/>batch × hidden]
+    H --> ACT[Activation]
+    ACT --> MM2[MatMul<br/>H @ W₂ᵀ]
+    W2[(weight₂<br/>out × hidden)] --> TR2[Transpose] --> MM2
+    MM2 --> ADD2[Add bias₂]
+    B2[(bias₂<br/>out)] --> ADD2
+    ADD2 --> P[Prediction<br/>batch × out]
+    P --> LOSS[Loss scalare]
+```
+
+Gli ingredienti del calcolo batched sono:
+
+1. **Esempio** — una singola osservazione rappresentata da un vettore di feature.
+2. **Batch** — più esempi omogenei raccolti lungo un nuovo asse.
+3. **Batch size** — numero di esempi presenti nel batch.
+4. **Feature axis** — asse che contiene le componenti di ogni esempio.
+5. **MatMul** — moltiplicazione che contrae le dimensioni interne e combina le feature.
+6. **Transpose** — riordina gli assi dei pesi per renderli compatibili con esempi memorizzati per righe.
+7. **Linear batched** — applica gli stessi weight e bias a ogni riga del batch.
+8. **Broadcasting del bias** — riusa un solo bias su tutti gli esempi.
+9. **Rappresentazione batched** — Tensor `(batch, features)` prodotto tra i layer.
+10. **Loss aggregata** — obiettivo scalare che riassume gli errori di esempi e output.
+11. **Gradienti condivisi** — somma dei contributi di tutto il batch negli stessi Parameter.
+
+I confini sono:
+
+```text
+ARCHITETTURA DEL MODELLO
+layer, Parameter e collegamenti rimangono invariati
+
+ORGANIZZAZIONE DEI DATI
+compare l'asse batch
+
+ESECUZIONE NUMERICA
+MatMul e broadcasting elaborano più esempi insieme
+
+AGGREGAZIONE DEL TRAINING
+loss e gradienti raccolgono i contributi del batch
+```
+
+Il capitolo non introduce una nuova rete: generalizza l'esecuzione della rete già costruita.
+
 ---
 
 ## 5.1 Perché introdurre il batch
@@ -603,6 +653,18 @@ implementazione PyTorch vettorizzata
 ## Ricomposizione: la rete batched
 
 Possiamo ora rileggere l'intera rete senza entrare nei loop di `MatMul`:
+
+```mermaid
+flowchart LR
+    X[Batch<br/>batch × in] --> L1[Linear batched]
+    L1 --> H[Hidden<br/>batch × hidden]
+    H --> R[Activation]
+    R --> L2[Linear batched]
+    L2 --> P[Prediction<br/>batch × out]
+    P --> LOSS[Loss scalare]
+    LOSS --> BW[Backward]
+    BW --> GP[Gradienti condivisi<br/>nei Parameter]
+```
 
 ```text
 X (batch, in)

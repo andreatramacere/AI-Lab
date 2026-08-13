@@ -56,6 +56,51 @@ Parameter → Module / Layer → Model
 
 Il deep dive deve rispondere a una domanda precisa: **come può una gerarchia di layer diventare una computazione differenziabile senza assegnare a ogni layer un sistema di gradienti separato?**
 
+### Diagramma del sottosistema
+
+```mermaid
+flowchart LR
+    X[Tensor input] --> OP1[MatMul Operation]
+    W[(weight Parameter)] --> OP1
+    OP1 --> Z1[Tensor intermedio]
+    B[(bias Parameter)] --> OP2[Add Operation]
+    Z1 --> OP2
+    OP2 --> Z2[Tensor intermedio]
+    Z2 --> ACT[ReLU Operation]
+    ACT --> H[Tensor hidden]
+
+    OP1 -. creator / inputs .-> G[Computational Graph]
+    OP2 -. creator / inputs .-> G
+    ACT -. creator / inputs .-> G
+    G --> AG[Autograd]
+    AG --> W
+    AG --> B
+```
+
+Il diagramma mostra una singola porzione della rete durante l'esecuzione. I suoi ingredienti sono:
+
+1. **Tensor di input** — porta nella computazione la rappresentazione ricevuta dal layer.
+2. **Parameter** — sono Tensor posseduti dal modello; qui rappresentano peso e bias.
+3. **Operation** — applica una trasformazione locale e conosce la propria regola di backward.
+4. **Tensor intermedio** — contiene il risultato di un'operazione e il collegamento al proprio `creator`.
+5. **Computational Graph** — non è un contenitore centrale: emerge dai legami tra Tensor e Operation.
+6. **Autograd** — percorre quei legami in senso inverso e compone le derivate locali.
+7. **Module / layer** — organizza Parameter e forward, ma riusa le Operations del core per il calcolo.
+8. **Model** — compone più Module e stabilisce il percorso complessivo input-prediction.
+
+I confini da mantenere sono:
+
+```text
+DATI              Tensor di input e Tensor intermedi
+STATO PERSISTENTE Parameter
+CALCOLO           Operation e forward
+STORIA            Computational Graph
+DIFFERENZIAZIONE  Autograd e backward locali
+ORGANIZZAZIONE    Module, layer e Model
+```
+
+Il capitolo parte dagli ingredienti più bassi e risale fino al modello, ricostruendo progressivamente ogni nodo del diagramma.
+
 ---
 
 ## 2.1 Tensor: il valore che attraversa il sistema
@@ -1352,6 +1397,21 @@ Il modello termina dunque concettualmente alla `Prediction`. La loss collega que
 ## Ricomposizione: dal core alla rete
 
 Ritorniamo ora all'anatomia generale introdotta nel capitolo 1.
+
+```mermaid
+flowchart LR
+    X[Input Tensor] --> L1[Linear Module]
+    P1[(Parameter)] --> L1
+    L1 --> R[ReLU Module]
+    R --> L2[Linear Module]
+    P2[(Parameter)] --> L2
+    L2 --> Y[Prediction Tensor]
+
+    L1 -. genera .-> G[Graph di Operations]
+    R -. estende .-> G
+    L2 -. estende .-> G
+    G --> A[Autograd]
+```
 
 ```text
 MATEMATICA

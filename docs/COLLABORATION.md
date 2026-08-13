@@ -140,6 +140,38 @@ forward dinamico e grafo computazionale
 
 Il capitolo introduttivo presenta sempre l'architettura complessiva della rete. I capitoli successivi possono così effettuare deep dive sui componenti senza perdere l'oggetto finale che stanno costruendo.
 
+### La big picture precede sempre i dettagli
+
+All'inizio di ogni capitolo o nuovo sottosistema deve comparire una rappresentazione complessiva sufficientemente concreta da permettere al lettore di orientarsi prima del deep dive.
+
+La big picture deve includere:
+
+1. un diagramma grafico del sistema o sottosistema, con flussi, dipendenze e confini;
+2. una descrizione per punti dei suoi ingredienti principali;
+3. la distinzione tra componenti, dati, stato persistente e processi;
+4. la separazione tra ciò che appartiene al modello e ciò che appartiene al sistema esterno, come training, dati o valutazione;
+5. il collegamento esplicito tra il sottosistema mostrato e la MAP globale.
+
+Il diagramma non deve essere decorativo: ogni nodo o termine specifico deve essere spiegato nel testo. Analogamente, una lista di definizioni non sostituisce il diagramma, perché deve essere visibile anche la relazione tra gli ingredienti.
+
+La profondità della big picture deve essere calibrata sul punto del percorso. Nelle fasi iniziali è preferibile essere più esaustivi concettualmente, anche a costo di anticipare brevemente termini che verranno implementati in seguito. L'anticipazione deve fornire intuizione e collocazione, non dettagli tecnici prematuri.
+
+La sequenza editoriale minima diventa:
+
+```text
+MAP GLOBALE
+  ↓
+DIAGRAMMA DEL SOTTOSISTEMA
+  ↓
+INVENTARIO CONCETTUALE DEGLI INGREDIENTI
+  ↓
+DEEP DIVE MATEMATICO / ARCHITETTURALE / IMPLEMENTATIVO
+  ↓
+DIAGRAMMA RICOMPOSTO
+  ↓
+RITORNO ALLA MAP
+```
+
 ## Regola — Ogni nuovo ente deve essere introdotto
 
 Ogni volta che compare per la prima volta un ente, un acronimo o un termine specifico dell'infrastruttura delle reti neurali, esso deve essere spiegato almeno intuitivamente prima di essere usato nel ragionamento.

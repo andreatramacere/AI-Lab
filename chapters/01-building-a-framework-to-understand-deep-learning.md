@@ -798,6 +798,18 @@ e mostra come, sopra quel core, emergano `Parameter`, `Module`, layer e modello.
 
 Siamo partiti dalla rete completa e l'abbiamo osservata come funzione, gerarchia, stato ed esecuzione. MyTorch la scompone non perché questi aspetti siano indipendenti, ma perché possano cooperare attraverso contratti espliciti:
 
+```mermaid
+flowchart TD
+    NN[Rete neurale] --> M[Model / Module hierarchy]
+    M --> P[(Parameter)]
+    M --> F[Forward]
+    F --> CG[Computational Graph]
+    CG --> A[Autograd]
+    A --> G[Gradienti]
+    G --> O[Optimizer]
+    O --> P
+```
+
 ```text
 RETE NEURALE
   composizione di trasformazioni parametriche

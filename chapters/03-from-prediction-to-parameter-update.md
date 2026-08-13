@@ -64,6 +64,49 @@ STATO            data e grad dei Parameter
 ESECUZIONE       forward → backward → step → nuovo forward
 ```
 
+### Diagramma del sottosistema
+
+```mermaid
+flowchart LR
+    D[Input x] --> M[Model f con Parameter θ]
+    M --> P[Prediction ŷ]
+    T[Target y] --> L[Loss]
+    P --> L
+    L --> B[Backward / Autograd]
+    B --> G[Gradienti ∂L/∂θ]
+    G --> O[Optimizer]
+    O --> U[Parameter θ aggiornati]
+    U --> M
+```
+
+Gli ingredienti del training loop sono:
+
+1. **Input** — dato su cui viene eseguito il modello.
+2. **Model** — funzione parametrica che produce la prediction.
+3. **Prediction** — output differenziabile del modello.
+4. **Target** — riferimento fornito dal dataset, esterno al modello.
+5. **Loss** — criterio scalare che stabilisce che cosa debba essere migliorato.
+6. **Backward** — attraversamento inverso della computazione costruita dal forward.
+7. **Gradienti** — sensibilità della loss rispetto ai Parameter.
+8. **Optimizer** — strategia che converte gradienti in aggiornamenti.
+9. **Parameter update** — mutazione persistente dello stato del modello.
+10. **Nuovo forward** — nuova esecuzione necessaria per osservare il modello aggiornato.
+
+I confini architetturali sono:
+
+```text
+APPARTIENE AL MODELLO
+Parameter, Module, forward, prediction
+
+APPARTIENE AI DATI / TASK
+input, target
+
+APPARTIENE AL TRAINING SYSTEM
+loss, backward, optimizer, iterazione
+```
+
+Il diagramma è un ciclo perché il training ripete la computazione dopo ogni aggiornamento; il grafo di una singola iterazione, invece, è la storia concreta di quel forward e backward.
+
 ---
 
 ## 3.1 Prediction e target non hanno lo stesso ruolo
@@ -446,6 +489,19 @@ Prima di introdurre ottimizzatori più sofisticati o architetture più profonde,
 ## Ricomposizione: il modello che apprende
 
 Il training loop ricompone i componenti senza fondere le loro responsabilità:
+
+```mermaid
+flowchart LR
+    X[Input] --> M[Model con Parameter θ]
+    M --> P[Prediction]
+    T[Target] --> L[Loss]
+    P --> L
+    L --> A[Autograd]
+    A --> G[Gradienti]
+    G --> O[Optimizer]
+    O --> U[θ aggiornati]
+    U --> M
+```
 
 ```text
 MODEL
