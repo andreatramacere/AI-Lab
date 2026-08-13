@@ -398,20 +398,126 @@ Il backward ricorsivo è sufficiente per il laboratorio corrente, ma non impleme
 
 ## 2.5 Cambio di livello: dal calcolo al modello
 
-Fin qui abbiamo parlato del **core computazionale**. Ora cambiamo livello di astrazione: non aggiungiamo nuove regole di derivazione, ma attribuiamo semantica e struttura ai tensori differenziabili.
+Fin qui abbiamo parlato del **core computazionale**. Il core sa rappresentare valori, applicare trasformazioni e calcolare gradienti, ma non possiede ancora il concetto di modello.
+
+Dal suo punto di vista, questi oggetti sono tutti tensori:
+
+```text
+input
+valore intermedio
+peso
+bias
+prediction
+```
+
+Le operazioni non devono sapere quale ruolo ricopra ciascun tensore. `MatMul`, per esempio, applica la stessa regola numerica e differenziale sia che un operando rappresenti dati osservati sia che rappresenti pesi apprendibili.
+
+Questa neutralità è una proprietà desiderata del core, ma lascia aperte nuove domande:
+
+```text
+Quali valori devono essere modificati durante il training?
+A quale componente appartengono?
+Come possiamo recuperarli senza elencarli manualmente?
+Come componiamo più trasformazioni in un unico modello?
+```
+
+Per rispondere non serve aggiungere una nuova algebra. Serve cambiare livello di astrazione e attribuire **semantica**, **ownership** e **struttura** agli oggetti già differenziabili.
 
 ```text
 CORE COMPUTAZIONALE        COMPOSIZIONE DEL MODELLO
 Tensor → Operation   →     Parameter → Module → Model
 ```
 
+La freccia tra i due livelli non indica che `Parameter` sostituisca `Tensor`. Indica una specializzazione:
+
+```text
+Tensor
+  valore che può partecipare al calcolo differenziabile
+        ↓ specializzazione semantica
+Parameter
+  Tensor che appartiene allo stato apprendibile
+        ↓ organizzazione
+Module
+  componente che possiede Parameter e definisce un forward
+        ↓ composizione
+Model
+  gerarchia di Module che produce una prediction
+```
+
+Il livello superiore riusa integralmente quello inferiore. I `Parameter` attraversano le stesse `Operation`, il grafo emerge nello stesso modo e Autograd applica le stesse regole locali. Cambia il significato attribuito ad alcuni tensori e il modo in cui vengono organizzati.
+
+Questo è quindi un cambio dall'astrazione **“come si calcola e si differenzia?”** all'astrazione **“quali valori costituiscono il modello e come sono composti?”**.
+
 ---
 
 ## 2.6 Parameter: un Tensor con semantica apprendibile
 
+Supponiamo di costruire una trasformazione affine usando tre tensori:
+
+```text
+y = W x + b
+```
+
+Per il core computazionale, `W`, `x` e `b` sono operandi. Durante il training, però, hanno ruoli differenti:
+
+```text
+x        dato fornito al modello
+W, b     stato interno che il modello deve apprendere
+y        risultato temporaneo del forward
+```
+
+Autograd può calcolare gradienti rispetto a tutti gli oggetti per cui `requires_grad=True`, ma questo flag risponde soltanto alla domanda:
+
+```text
+“devo propagare e conservare il gradiente per questo Tensor?”
+```
+
+Non risponde alla domanda:
+
+```text
+“questo Tensor fa parte dello stato che l'optimizer deve aggiornare?”
+```
+
+Un input può richiedere il gradiente, per esempio per studiare la sensibilità della prediction rispetto ai dati, costruire metodi di interpretabilità o ottimizzare direttamente un input. Ciò non lo trasforma in un peso del modello.
+
+```python
+x = Tensor([2.0], requires_grad=True)
+```
+
+Qui `x.grad` verrà calcolato, ma `x` non dovrebbe comparire automaticamente in `model.parameters()`.
+
+`Parameter` introduce precisamente la semantica mancante: identifica un tensore come parte persistente e apprendibile del modello.
+
+```text
+requires_grad=True
+    richiede il calcolo del gradiente
+
+isinstance(value, Parameter)
+    identifica lo stato apprendibile posseduto dal modello
+```
+
 ### Architettura
 
 Un `Parameter` è un `Tensor` che appartiene allo stato apprendibile di un modello. La differenza è semantica, non numerica: pesi e bias partecipano alle stesse operazioni degli altri tensori, ma devono essere trovati dal modello ed esposti all'ottimizzatore.
+
+La relazione è:
+
+```text
+ogni Parameter è un Tensor
+non ogni Tensor è un Parameter
+```
+
+Essendo un `Tensor`, un `Parameter` possiede `data`, `shape`, `grad`, `requires_grad` e `creator`, e può partecipare a tutte le operazioni già implementate. Non richiede una rappresentazione numerica separata né un sistema di Autograd speciale.
+
+Normalmente un parametro è anche un tensore foglia:
+
+```text
+parameter.creator = None
+```
+
+Non è prodotto dal forward corrente: esiste già prima del forward e viene usato per costruirlo. Il gradiente raggiunge questa foglia percorrendo a ritroso le operazioni che dipendono da essa.
+
+Essere una foglia non è però sufficiente a renderlo un parametro. Anche `x` e `target` possono essere tensori foglia. Ancora una volta, la distinzione è il ruolo architetturale.
 
 ### Implementazione
 
@@ -424,6 +530,30 @@ class Parameter(Tensor):
 ```
 
 `requires_grad=True` è necessario, ma non esaurisce il significato di `Parameter`. Un normale input può richiedere il gradiente senza essere parte dello stato apprendibile. Il tipo `Parameter` permette a `Module` di riconoscere ciò che appartiene al modello.
+
+Durante il training, i diversi aspetti del parametro cambiano in momenti differenti:
+
+```text
+creazione
+    data contiene il valore iniziale
+    grad è None
+
+forward
+    data viene letta dalle Operations
+
+backward
+    grad accumula ∂loss/∂parameter
+    data non cambia
+
+optimizer.step()
+    data viene aggiornata usando grad
+
+zero_grad()
+    grad torna a None
+    data conserva il valore aggiornato
+```
+
+Il `Parameter` mantiene la propria identità come oggetto posseduto dal modello mentre il suo stato numerico evolve. Questo permette al `Module` e all'optimizer di conservare riferimenti allo stesso oggetto senza doverlo riscoprire dopo ogni aggiornamento.
 
 ---
 
@@ -459,6 +589,48 @@ Model
 │   └── Layer
 └── Output Layer
 ```
+
+### Relazione tra Module e layer
+
+In MyTorch, **un layer viene implementato come una sottoclasse di `Module`**.
+
+```text
+Module
+  astrazione software generale per componenti del modello
+        ↓ specializzazione
+Layer
+  Module che realizza una trasformazione della rappresentazione
+```
+
+Per esempio:
+
+```python
+class Linear(Module):
+    ...
+
+class ReLU(Module):
+    ...
+```
+
+Entrambi sono layer perché ricevono un `Tensor` e producono un nuovo `Tensor` come parte del flusso del modello. Entrambi sono implementati mediante il contratto di `Module`, in particolare definendo `forward()`.
+
+La relazione, però, non è un'identità:
+
+```text
+ogni layer di MyTorch è un Module
+non ogni Module è necessariamente un singolo layer
+```
+
+`TinyNet`, per esempio, è anch'essa una sottoclasse di `Module`, ma rappresenta l'intero modello e contiene più layer:
+
+```text
+TinyNet : Module
+├── layer1 : Linear, quindi Module
+├── relu   : ReLU, quindi Module
+└── layer2 : Linear, quindi Module
+```
+
+Questa uniformità è ciò che rende possibile la composizione: dal punto di vista del codice, un layer elementare, un blocco di layer e un modello completo espongono tutti la stessa interfaccia `forward()`.
 
 Questa gerarchia non coincide con il grafo computazionale. La gerarchia dei moduli descrive la struttura relativamente stabile del modello e l'ownership dei parametri; il grafo computazionale descrive invece le operazioni effettivamente eseguite durante uno specifico forward.
 
@@ -511,7 +683,7 @@ Il meccanismo corrente scopre parametri e sottomoduli assegnati direttamente com
 
 ## 2.8 Linear: una struttura costruita con primitive esistenti
 
-`Module` definisce come organizzare un componente, ma non specifica quale trasformazione debba eseguire. `Linear` è il primo `Module` concreto di MyTorch: assegna una precisa interpretazione matematica al contratto generico `forward()` e possiede i `Parameter` necessari a realizzarlo.
+`Module` definisce come organizzare un componente, ma non specifica quale trasformazione debba eseguire. **`Linear` implementa un layer come sottoclasse concreta di `Module`**: assegna una precisa interpretazione matematica al contratto generico `forward()` e possiede i `Parameter` necessari a realizzarlo.
 
 Il passaggio può essere letto così:
 
@@ -519,7 +691,8 @@ Il passaggio può essere letto così:
 Module
   fornisce composizione, ownership e interfaccia
         ↓
-Linear
+Linear : Module
+  implementa un layer
   sceglie una trasformazione affine
   e la costruisce con Operations esistenti
 ```
