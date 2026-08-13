@@ -831,7 +831,7 @@ language model
   hidden (d_model,) → logits (vocabulary_size,)
 ```
 
-### Schema grafico: da hidden `(2,)` a prediction `(3,)`
+### Schema grafico: come una testa trasforma `(2,)` in `(3,)`
 
 Supponiamo che l'ultima hidden representation abbia due coordinate, mentre il task richieda tre valori di output:
 
@@ -840,27 +840,75 @@ h_last.shape = (2,)
 target.shape = (3,)
 ```
 
-L'output head deve quindi possedere tre neuroni di output. Ognuno legge entrambe le coordinate hidden:
+Il numero `2` descrive quante coordinate entrano nella testa. Il numero `3` descrive quanti valori la testa deve produrre.
+
+La trasformazione avviene in tre passaggi:
+
+```text
+1. h_last contiene 2 coordinate: [h₀, h₁]
+2. la testa possiede 3 neuroni; ciascuno legge h₀ e h₁
+3. i 3 scalari prodotti diventano le coordinate di ŷ: [ŷ₀, ŷ₁, ŷ₂]
+```
+
+#### Vista 1 — collegamenti tra coordinate e neuroni
 
 ```mermaid
 flowchart LR
-    H0[Hidden coordinate h₀] -->|V₀₀| O0[Output neuron 0<br/>ŷ₀]
-    H1[Hidden coordinate h₁] -->|V₀₁| O0
-    C0[(bias c₀)] --> O0
+    subgraph H[Last hidden representation h_last — shape 2]
+        H0[coordinate h₀]
+        H1[coordinate h₁]
+    end
 
-    H0 -->|V₁₀| O1[Output neuron 1<br/>ŷ₁]
-    H1 -->|V₁₁| O1
-    C1[(bias c₁)] --> O1
+    subgraph HEAD[Output head Linear 2 → 3]
+        N0[neurone 0]
+        N1[neurone 1]
+        N2[neurone 2]
+    end
 
-    H0 -->|V₂₀| O2[Output neuron 2<br/>ŷ₂]
-    H1 -->|V₂₁| O2
-    C2[(bias c₂)] --> O2
+    subgraph O[Prediction Tensor y_hat — shape 3]
+        Y0[coordinate y_hat₀]
+        Y1[coordinate y_hat₁]
+        Y2[coordinate y_hat₂]
+    end
 
-    O0 --> P[Prediction Tensor ŷ<br/>shape 3]
-    O1 --> P
-    O2 --> P
-    T[Target Tensor y<br/>shape 3] -. confronto mediante loss .-> P
+    H0 -->|V₀₀| N0
+    H1 -->|V₀₁| N0
+    H0 -->|V₁₀| N1
+    H1 -->|V₁₁| N1
+    H0 -->|V₂₀| N2
+    H1 -->|V₂₁| N2
+
+    N0 --> Y0
+    N1 --> Y1
+    N2 --> Y2
 ```
+
+La testa è completamente connessa: le due coordinate hidden arrivano a tutti e tre i neuroni. Ogni freccia possiede un peso. I bias, omessi dal diagramma per non sovraccaricarlo, sono uno per neurone: `c₀`, `c₁`, `c₂`.
+
+Il punto essenziale è che un neurone di output produce **un solo scalare**:
+
+```text
+neurone 0 → ŷ₀
+neurone 1 → ŷ₁
+neurone 2 → ŷ₂
+                 ↓ assemblaggio
+prediction ŷ = [ŷ₀, ŷ₁, ŷ₂]
+```
+
+#### Vista 2 — dai Tensor alla loss
+
+```mermaid
+flowchart LR
+    H[Hidden Tensor h_last<br/>valori h₀, h₁<br/>shape 2] --> HEAD[Output head<br/>Linear 2, 3]
+    HEAD --> P[Prediction Tensor y_hat<br/>valori y_hat₀, y_hat₁, y_hat₂<br/>shape 3]
+    T[Target Tensor y<br/>valori y₀, y₁, y₂<br/>shape 3] --> L[MSE Loss]
+    P --> L
+    L --> S[Loss scalare]
+```
+
+La hidden representation entra nel modello finale; il target non entra nell'output head. Prediction e target si incontrano soltanto nella loss.
+
+#### Vista 3 — la stessa trasformazione come algebra
 
 In forma tensoriale, la testa è un `Linear(2, 3)`:
 
@@ -890,15 +938,31 @@ Le shape seguono direttamente da `MatMul`:
 (3, 2) @ (2,) + (3,) → (3,)
 ```
 
-La dimensione hidden `2` viene contratta. La dimensione di output `3`, cioè il numero di neuroni della testa, rimane e determina la shape della prediction.
+La dimensione hidden `2` viene contratta: compare nelle due colonne di `V` e nelle due coordinate di `h_last`, ma non nell'output. La dimensione `3` rimane perché corrisponde alle tre righe di `V`, ai tre neuroni della testa e alle tre coordinate della prediction.
 
 ```text
-hidden dimension       2
-  determina quante coordinate legge ogni neurone della testa
+2 coordinate hidden
+  ↔ 2 colonne della matrice V
+  ↔ 2 ingressi per ciascun neurone
 
-output dimension       3
-  determina quanti neuroni possiede la testa
-  e quante coordinate produce la prediction
+3 coordinate di output
+  ↔ 3 righe della matrice V
+  ↔ 3 neuroni della testa
+  ↔ 3 valori nel Tensor prediction
+```
+
+In sintesi:
+
+```text
+hidden Tensor (2,)
+      ↓ Linear(2, 3)
+3 neuroni, ognuno legge 2 valori
+      ↓
+3 scalari assemblati
+      ↓
+prediction Tensor (3,)
+      ↓ confronto MSE con
+target Tensor (3,)
 ```
 
 ### Input e target non devono avere la stessa shape
