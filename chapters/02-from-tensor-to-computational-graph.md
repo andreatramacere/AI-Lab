@@ -429,6 +429,46 @@ class Parameter(Tensor):
 
 ## 2.7 Module: composizione e ownership
 
+Con `Parameter` abbiamo distinto i tensori apprendibili dagli altri tensori, ma non abbiamo ancora stabilito **a quale componente appartengano** né come recuperarli quando il modello cresce.
+
+In un modello reale, mantenere manualmente una lista separata di pesi e bias sarebbe fragile:
+
+```text
+weight_1, bias_1, weight_2, bias_2, ...
+```
+
+Ogni nuova parte del modello obbligherebbe il training loop, l'optimizer e gli strumenti di salvataggio a conoscere la sua struttura interna. Il problema non è matematico: Autograd sa già calcolare i gradienti. È un problema di organizzazione dello stato e delle responsabilità.
+
+`Module` introduce la risposta architetturale:
+
+```text
+Parameter
+    stabilisce che un Tensor è apprendibile
+
+Module
+    stabilisce chi possiede quel Parameter
+    e quale calcolo viene eseguito con esso
+```
+
+Un modulo costituisce quindi un confine software attorno a stato e comportamento correlati. Può rappresentare un singolo layer, un blocco composto oppure l'intero modello. Poiché un `Module` può contenere altri `Module`, la stessa astrazione funziona a scale differenti:
+
+```text
+Model
+├── Block
+│   ├── Layer
+│   └── Layer
+└── Output Layer
+```
+
+Questa gerarchia non coincide con il grafo computazionale. La gerarchia dei moduli descrive la struttura relativamente stabile del modello e l'ownership dei parametri; il grafo computazionale descrive invece le operazioni effettivamente eseguite durante uno specifico forward.
+
+```text
+GERARCHIA DEI MODULE             GRAFO COMPUTAZIONALE
+struttura del modello            storia di una computazione
+possesso dei Parameter           legami Tensor ↔ Operation
+esiste prima del forward         emerge durante il forward
+```
+
 ### Architettura
 
 Un `Module` organizza:
@@ -470,6 +510,46 @@ Il meccanismo corrente scopre parametri e sottomoduli assegnati direttamente com
 ---
 
 ## 2.8 Linear: una struttura costruita con primitive esistenti
+
+`Module` definisce come organizzare un componente, ma non specifica quale trasformazione debba eseguire. `Linear` è il primo `Module` concreto di MyTorch: assegna una precisa interpretazione matematica al contratto generico `forward()` e possiede i `Parameter` necessari a realizzarlo.
+
+Il passaggio può essere letto così:
+
+```text
+Module
+  fornisce composizione, ownership e interfaccia
+        ↓
+Linear
+  sceglie una trasformazione affine
+  e la costruisce con Operations esistenti
+```
+
+`Linear` collega due spazi di rappresentazione. Riceve un certo numero di componenti, ne costruisce combinazioni pesate e produce un nuovo numero di componenti. I coefficienti di queste combinazioni non sono fissati nel codice: sono `Parameter` appresi durante il training.
+
+Per ogni componente di output, il layer calcola una diversa combinazione di tutti gli input:
+
+```text
+input x₀ ─┬────────→ output y₀
+input x₁ ─┼────────→ output y₁
+input x₂ ─┴────────→ output y₂
+
+ogni collegamento possiede un peso apprendibile
+ogni output possiede inoltre un bias apprendibile
+```
+
+Il nome storico `Linear` richiede una precisazione: con il bias, la trasformazione `Wx + b` è matematicamente **affine**, non strettamente lineare. I framework mantengono comunque il nome `Linear` per questo tipo di layer.
+
+Dal punto di vista di MyTorch, l'aspetto decisivo è che `Linear` non aggiunge una nuova primitiva al core computazionale. Compone oggetti già disponibili:
+
+```text
+Parameter weight
+Parameter bias
+Tensor input
+Operation MatMul
+Operation Add
+```
+
+In questo modo il layer ottiene automaticamente costruzione del grafo e backward dalle operazioni sottostanti. `Linear` decide **quale calcolo comporre**; non reimplementa **come differenziarlo**.
 
 ### Matematica
 
@@ -733,12 +813,31 @@ Non valuta la qualità della predizione e non aggiorna i parametri. Queste respo
 Il core computazionale, il modello e il training loop diventano osservabili insieme in una singola iterazione:
 
 ```python
+model = TinyNet()
+loss_fn = MSELoss()
+optimizer = SGD(model.parameters(), lr=0.01)
+
+x = Tensor([2.0])
+target = Tensor([4.0])
+
 optimizer.zero_grad()
 prediction = model(x)
 loss = loss_fn(prediction, target)
 loss.backward()
 optimizer.step()
 ```
+
+Nello snippet:
+
+```text
+model       istanza di TinyNet, definita nella sezione 2.9
+loss_fn     istanza della Mean Squared Error di MyTorch
+optimizer   SGD che gestisce i Parameter esposti dal modello
+x           input con shape (1,)
+target      valore atteso con shape (1,)
+```
+
+`model.parameters()` restituisce i pesi e i bias dei due layer annidati. L'optimizer conserva riferimenti a questi stessi oggetti `Parameter`: quando esegue `step()`, modifica quindi lo stato appartenente a `model`.
 
 Queste righe non rappresentano un'unica operazione monolitica. Coordinano componenti con responsabilità e stati differenti:
 
