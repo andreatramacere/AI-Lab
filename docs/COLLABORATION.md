@@ -13,6 +13,22 @@ pasto dei testi di filosofia, ed una dandogli in pasto dei testi di astrofisica,
 - vorrei diventare in grado di costuire LLM esperte in singoli task, credo sia ottimo per il mercato del lavoro, 
 con preferenza a task scientifici
 
+## Direzione scientifica del percorso
+
+Il laboratorio deve collegare i fondamenti del Deep Learning al mio background di astrofisico. Non voglio soltanto conoscere le architetture: voglio imparare a scegliere, implementare e valutare modelli adatti a problemi scientifici reali.
+
+Oltre ai modelli linguistici esperti di dominio, il percorso deve includere tre famiglie di reti:
+
+- **CNN (Convolutional Neural Networks)**, per comprendere come una rete sfrutta la struttura locale e l'equivarianza per traslazione in immagini, mappe, spettri e serie multidimensionali di interesse astrofisico;
+- **GNN (Graph Neural Networks)**, per rappresentare sistemi nei quali sorgenti, particelle, aloni o eventi sono entità collegate da relazioni fisiche o geometriche;
+- **PINN (Physics-Informed Neural Networks)**, per incorporare equazioni differenziali, condizioni iniziali e condizioni al contorno direttamente nell'obiettivo di training.
+
+Il progetto scientifico guida per le PINN sarà lo studio dell'equazione di **Fokker–Planck (FP)** applicata all'evoluzione delle distribuzioni di particelle nei blazar. L'obiettivo sarà verificare se una PINN possa affiancare o accelerare la soluzione numerica, soprattutto quando il problema deve essere risolto ripetutamente per parametri fisici differenti.
+
+“Accelerare” non deve essere assunto a priori: dovrà essere misurato rispetto a un solver numerico di riferimento, confrontando almeno accuratezza, residuo dell'equazione, rispetto dei vincoli fisici, stabilità, costo di training e costo di inferenza.
+
+MyTorch continuerà a servire per comprendere e implementare i meccanismi fondamentali. PyTorch sarà usato quando l'applicazione richiederà primitive più mature, come convoluzioni, operazioni su grafi o derivate di ordine superiore. Il passaggio tra i due framework deve essere esplicito e motivato architetturalmente.
+
 ## Come lavoriamo
 
 Il mio obiettivo non è seguire un corso di AI, ma costruire una mappa mentale dell'AI moderna.
