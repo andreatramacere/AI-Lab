@@ -66,3 +66,9 @@ Solo dopo il consolidamento viene generato uno snapshot del laboratorio in forma
 
 ## Lingua 
  quando scrivi nel repo, eccetto COLLABORATION.md, tutta va in Inglese
+
+## Regola — Zoom Out
+
+La mappa è spaziale, non temporale.
+
+Non esiste un "prima" e un "dopo" assoluto imposto dalla mappa. Prima di entrare nel dettaglio di un componente, individuiamo dove si trova, da cosa dipende, cosa utilizza e chi dipende da lui. Possiamo entrare da qualunque nodo purché manteniamo il contesto architetturale.

@@ -1,352 +1,437 @@
-02 From Tensor To Computational Graph
+# 02 — From Tensor to Computational Graph
 
-Purpose
+## Purpose
 
 The goal of MyTorch is not to build neural networks directly.
 
-Its first objective is to build a computational engine capable of representing values, transforming them, recording those transformations, and propagating gradients.
+Its first objective is to build a computational engine capable of representing values, transforming them, recording those transformations, and propagating gradients. Once this core exists, learnable parameters and neural-network modules can be built on top of it.
 
-Everything else in the framework is built on top of this core.
+This chapter follows the architecture from the computational core up to the first complete neural-network model.
 
-⸻
+## Architectural Overview
 
-Architectural Overview
-
+```text
 Tensor
-    │
-    ▼
+  ↓
 Operation
-    │
-    ▼
+  ↓
 Computational Graph
-    │
-    ▼
+  ↓
 Autograd
-    │
-    ▼
+  ↓
 Parameter
+  ↓
+Module
+  ↓
+Linear
+  ↓
+Neural Network
+```
 
-These five concepts form the computational foundation of MyTorch.
+The map is architectural, not temporal: each concept is understood by where it sits, what it depends on, and what depends on it.
 
-Understanding them means understanding how every neural network library works internally.
+---
 
-⸻
+## 2.1 Tensor
 
-2.1 Tensor
+### When
 
-When
+A Tensor is created whenever a value enters the MyTorch computational system.
 
-A Tensor is created whenever a value enters the computational system.
+Examples include input data, model parameters, intermediate results, and loss values.
 
-Examples include:
-
-* input data
-* model parameters
-* intermediate results
-* loss values
-
-Every quantity that participates in computation is represented as a Tensor.
-
-⸻
-
-Where
+### Where
 
 A Tensor is the object that flows through the entire computational engine.
 
+```text
 Tensor
-   ↓
+  ↓
 Operation
-   ↓
+  ↓
 Tensor
-   ↓
+  ↓
 Operation
-   ↓
+  ↓
 Tensor
+```
 
-Everything operates on Tensors and produces new Tensors.
+### How
 
-⸻
+Conceptually, a Tensor represents a portion of memory together with the context required to use it in computation.
 
-How
+It carries:
 
-A Tensor stores both numerical data and the information required for automatic differentiation.
+- `data`: the numerical values;
+- `shape`: how those values are interpreted;
+- `stride`: how the underlying memory is traversed, when represented explicitly by the implementation;
+- `requires_grad`: whether gradients must be tracked;
+- `grad`: the gradient of the loss with respect to the values stored in `data`;
+- `creator`: the operation that produced the Tensor.
 
-Conceptually, a Tensor contains:
+The key gradient relation is:
 
-* data
-* shape
-* stride
-* requires_grad
-* grad
-* creator
-
-data
-
-The numerical values.
-
-shape
-
-How those values are interpreted.
-
-stride
-
-How memory is traversed.
-
-Depending on the implementation, stride may be stored explicitly or derived from the underlying storage.
-
-requires_grad
-
-Whether gradients must be computed.
-
-grad
-
-The gradient of the loss with respect to the Tensor’s data.
-
+```text
 grad = ∂Loss / ∂data
+```
 
-creator
+### Why
 
-The operation that produced this Tensor.
+A raw array stores values. A Tensor stores values plus the context needed for differentiable computation.
 
-⸻
+The Tensor is therefore the universal value-carrying object inside MyTorch.
 
-Why
+---
 
-A raw array only stores numbers.
+## 2.2 Operation
 
-A Tensor stores numbers together with the information necessary for gradient-based computation.
+### When
 
-It is the universal object that travels inside MyTorch.
+An Operation is involved whenever one or more Tensors are transformed.
 
-⸻
+Examples include addition, multiplication, matrix multiplication, ReLU, sum, and mean.
 
-2.2 Operation
-
-When
-
-Every transformation of one or more Tensors is an Operation.
-
-Examples include:
-
-* addition
-* multiplication
-* matrix multiplication
-* ReLU
-* sum
-* mean
-
-⸻
-
-Where
+### Where
 
 Operations sit between Tensors.
 
+```text
 Tensor
-   │
-   ▼
+  ↓
 Operation
-   │
-   ▼
+  ↓
 Tensor
+```
 
-⸻
+### How
 
-How
+Every Operation follows the same architectural pattern:
 
-Every Operation performs the same conceptual sequence.
-
+```text
 Receive input Tensors
         ↓
-Compute new values
+Compute output values
         ↓
 Create output Tensor
         ↓
 Register itself as creator
+```
 
-⸻
+### Why
 
-Why
+Tensor stores state; Operation transforms state.
 
-Tensor stores state.
+Separating these responsibilities keeps the computational engine modular and allows new transformations to be added without turning Tensor into a monolithic class.
 
-Operation transforms state.
+---
 
-Keeping these responsibilities separate makes the architecture modular and extensible.
+## 2.3 Computational Graph
 
-⸻
+### When
 
-2.3 Computational Graph
+The computational graph appears automatically as Operations are executed.
 
-When
+It is not a structure that the user explicitly builds.
 
-A computational graph appears automatically as Operations are executed.
+### Where
 
-It is not built explicitly by the user.
+The graph is distributed across the objects involved in computation.
 
-⸻
+Each Tensor knows its `creator`, while each Operation knows the Tensors that were used as inputs.
 
-Where
+There is no need for a central graph object.
 
-The graph is distributed.
+### How
 
-Each Tensor knows its creator.
+Each Operation extends the graph by one computational step.
 
-Each Operation knows its inputs.
-
-There is no central graph object.
-
-⸻
-
-How
-
-Each Operation contributes one node.
-
+```text
 Tensor
-    ↓
+  ↓
 Operation
-    ↓
+  ↓
 Tensor
-    ↓
+  ↓
 Operation
-    ↓
+  ↓
 Tensor
+```
 
-As execution progresses, the graph grows naturally.
+The graph therefore emerges from the links between Tensors and Operations.
 
-⸻
+### Why
 
-Why
+The graph preserves the history of the forward computation. That history is what makes reverse traversal possible during gradient computation.
 
-The graph records the complete history of the forward computation.
+---
 
-This history will later be traversed during backpropagation.
+## 2.4 Autograd
 
-⸻
+### When
 
-2.4 Autograd
+Autograd becomes relevant when gradients are needed, typically during training.
 
-When
+Pure inference does not require reverse gradient propagation.
 
-Autograd is used during training.
+### Where
 
-It is unnecessary during pure inference.
+Autograd operates on the computational graph and traverses it in the reverse direction.
 
-⸻
-
-Where
-
-Autograd operates on top of the computational graph.
-
-It traverses the graph in reverse order.
-
-Forward
+```text
+Forward:
 A → B → C → Loss
-Backward
+
+Backward:
 Loss → C → B → A
+```
 
-⸻
+### How
 
-How
+Each Operation has two conceptual faces:
 
-Each Operation implements two conceptual behaviors.
+```text
+forward()
+backward()
+```
 
-Forward()
-Backward()
+During the forward pass, the Operation maps inputs to outputs.
 
-During the forward pass:
+During the backward pass, it maps the gradient arriving from its output to the gradients required by its inputs.
 
-input
-   ↓
-output
+Autograd coordinates these local backward rules across the graph.
 
-During the backward pass:
+### Why
 
-∂output
-     ↓
-∂input
+No single component knows the complete derivative of the loss with respect to every earlier value.
 
-Autograd coordinates this reverse traversal.
+Each Operation knows only its local derivative. Autograd composes those local derivatives by traversing the graph backwards.
 
-⸻
+---
 
-Why
+## 2.5 Parameter
 
-No component knows the complete derivative.
+### When
 
-Each Operation contributes only its local derivative.
+A Parameter appears when a Tensor represents a learnable quantity, such as a weight or a bias.
 
-Autograd combines these local derivatives to compute gradients throughout the graph.
+### Where
 
-⸻
+Parameters live inside Modules.
 
-2.5 Parameter
-
-When
-
-A Parameter appears whenever a Tensor represents a learnable quantity.
-
-Typical examples include:
-
-* weights
-* biases
-
-⸻
-
-Where
-
-Parameters belong to Modules.
-
+```text
 Module
- ├── Parameter
- ├── Parameter
- └── Parameter
+├── Parameter
+├── Parameter
+└── Parameter
+```
 
-⸻
+### How
 
-How
+A Parameter is a specialized Tensor. It does not introduce a new numerical representation; it adds semantic meaning to an existing Tensor abstraction.
 
-A Parameter is a specialized Tensor.
-
-It inherits the computational capabilities of Tensor while adding semantic meaning.
-
-⸻
-
-Why
+### Why
 
 Not every Tensor should be optimized.
 
-A Parameter explicitly identifies the values that an optimizer must update during training.
+Parameter tells the framework that this particular Tensor is part of the learnable state of the model and must therefore be exposed to an optimizer.
 
 The distinction is semantic rather than computational.
 
-⸻
+---
 
-Chapter Summary
+## 2.6 Module
 
-The computational core of MyTorch consists of five concepts.
+### When
 
-Tensor
-    │
-    ▼
-Operation
-    │
-    ▼
-Computational Graph
-    │
-    ▼
-Autograd
-    │
-    ▼
+A Module appears when Parameters and computations must be organized into a reusable neural-network component.
+
+Typical Modules include `Linear`, activations, sequential containers, or complete models.
+
+### Where
+
+Module sits between individual Parameters and the complete neural network.
+
+```text
 Parameter
+   ↓
+Module
+   ↓
+Neural Network
+```
 
-Tensor carries information.
+A model is therefore not just a flat collection of weights: it is a hierarchy of Modules, each of which owns or contains the Parameters relevant to its computation.
 
-Operation transforms information.
+### How
 
-Operations collectively build the Computational Graph.
+A Module mainly organizes state and computation.
 
-Autograd traverses that graph backwards to compute gradients.
+Conceptually:
 
-Parameters identify which Tensors should be updated during learning.
+```text
+Module
+├── Parameters
+├── optional submodules
+└── forward()
+```
 
-Everything that follows in MyTorch—Modules, Layers, Neural Networks, Losses and Optimizers—is built on top of this computational foundation.
+The Module does not introduce a new mathematical primitive. It composes objects already provided by the computational core.
+
+### Why
+
+Without Module, every part of the training system would need to know where every individual weight and bias is stored.
+
+With Module, Parameters can be discovered and managed through the model hierarchy. Optimizers, serialization logic, and higher-level code can interact with the Module instead of manually tracking each learnable value.
+
+Module therefore introduces **composition** as a first-class architectural concept.
+
+---
+
+## 2.7 Linear
+
+### When
+
+A Linear layer is used when an input vector must be transformed into a new output vector through an affine transformation.
+
+### Where
+
+`Linear` is the first concrete Module in the architecture.
+
+```text
+Parameter
+   ↓
+Module
+   ↓
+Linear
+```
+
+### How
+
+A Linear layer contains learnable Parameters, typically:
+
+```text
+weight : Parameter
+bias   : Parameter
+```
+
+and defines a forward computation equivalent to:
+
+```text
+y = Wx + b
+```
+
+Architecturally, however, `Linear` does not implement a new computational engine. It composes primitive Operations:
+
+```text
+input Tensor
+    ↓
+MatMul
+    ↓
+Add bias
+    ↓
+output Tensor
+```
+
+### Why
+
+Linear shows the separation between primitive computation and neural-network structure.
+
+`MatMul` and `Add` are Operations. `Linear` is a Module that composes them together with learnable Parameters.
+
+This pattern scales naturally to more complex layers: higher-level structures are built by composing lower-level primitives rather than by creating a new computational mechanism each time.
+
+---
+
+## 2.8 Neural Network
+
+### When
+
+A Neural Network appears when multiple Modules are connected to produce a prediction for a task.
+
+For example:
+
+```text
+Input
+  ↓
+Linear
+  ↓
+ReLU
+  ↓
+Linear
+  ↓
+Prediction
+```
+
+### Where
+
+The Neural Network is the highest abstraction reached in this chapter.
+
+```text
+Tensor
+  ↓
+Operation
+  ↓
+Parameter
+  ↓
+Module
+  ↓
+Neural Network
+```
+
+### How
+
+A neural network orchestrates the `forward()` computations of its Modules.
+
+Each Module receives a Tensor and produces another Tensor, allowing the full model to be expressed as a composition of reusable components.
+
+### Why
+
+The model should define **how a prediction is produced**, not how learning itself is performed.
+
+A Neural Network therefore organizes Modules and defines the forward flow. It does not decide whether a prediction is good or bad, and it does not update its own Parameters.
+
+Its responsibility ends at the prediction.
+
+---
+
+## 2.9 Boundary of This Chapter
+
+At this point the architecture can produce a prediction, but it does not yet form a complete learning loop.
+
+The next layer of the map is:
+
+```text
+Prediction
+   ↓
+Loss
+   ↓
+Backward
+   ↓
+Optimizer
+   ↓
+Updated Parameters
+   ↺
+New Forward
+```
+
+Loss and Optimizer belong to the training loop and therefore mark the next conceptual step after the computational core and model composition established here.
+
+---
+
+## Chapter Summary
+
+The architecture developed in this chapter can be read as a sequence of responsibilities:
+
+```text
+Tensor              carries values and differentiable context
+Operation           transforms Tensors
+Computational Graph records the history of transformations
+Autograd            traverses that history backwards
+Parameter           marks learnable Tensors
+Module              organizes Parameters and computations
+Linear              composes primitive Operations into a concrete layer
+Neural Network      composes Modules into a model that produces predictions
+```
+
+No single object does everything.
+
+The power of MyTorch comes from the relationships between these abstractions. The computational engine remains small, while increasingly complex neural-network structures emerge through composition.
