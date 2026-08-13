@@ -436,6 +436,87 @@ h_last → output head → prediction
 
 Ma `h_last` non ha ancora necessariamente la shape o la semantica della prediction. È il materiale informativo interno da cui l'output head la costruisce.
 
+### Definizione operativa durante il forward
+
+Data una rete con parametri correnti `θ` e dato uno specifico input `x`, il forward produce una sequenza ordinata di Tensor intermedi.
+
+```mermaid
+flowchart LR
+    X[Input<br/>h₀ = x] --> L1[Layer parametrico 1]
+    L1 --> Z1[Pre-activation<br/>z₁ = W₁h₀ + b₁]
+    Z1 --> A1[Activation 1]
+    A1 --> H1[Post-activation<br/>h₁ = activation₁ di z₁]
+    H1 --> L2[Layer parametrico 2]
+    L2 --> Z2[Pre-activation<br/>z₂ = W₂h₁ + b₂]
+    Z2 --> A2[Activation 2]
+    A2 --> H2[Post-activation<br/>h₂ = activation₂ di z₂]
+    H2 --> HEAD[Output head]
+    HEAD --> YH[Prediction ŷ]
+```
+
+Nel diagramma, `aᵢ(zᵢ)` indica l'applicazione della funzione di attivazione; in forma matematica:
+
+```text
+h₀ = x
+z₁ = W₁h₀ + b₁
+h₁ = a₁(z₁)
+z₂ = W₂h₁ + b₂
+h₂ = a₂(z₂)
+ŷ  = output_head(h₂)
+```
+
+La definizione operativa è:
+
+> Una hidden representation è un Tensor intermedio prodotto in un punto interno del forward, per uno specifico input e per gli attuali valori dei parametri.
+
+I valori prima e dopo l'attivazione possono entrambi essere considerati rappresentazioni interne, purché si specifichi quale si intende:
+
+```text
+zᵢ = hidden pre-activation
+  output del layer parametrico prima della non-linearità
+
+hᵢ = hidden post-activation
+  output della funzione di attivazione passato al layer successivo
+```
+
+Nel laboratorio useremo normalmente `hᵢ` per la rappresentazione post-activation che attraversa il confine tra due layer:
+
+```text
+Layer i → zᵢ → Activation → hᵢ → Layer i+1
+```
+
+Quando la distinzione è rilevante per formula, backward o interpretazione, useremo esplicitamente `zᵢ` e `hᵢ`.
+
+Non useremo invece il termine prediction per questi valori intermedi:
+
+```text
+zᵢ, hᵢ    hidden representation interne
+ŷ         prediction finale del modello
+```
+
+### Il ruolo della storia di training
+
+La storia del training determina come i parametri siano arrivati ai valori correnti, ma non entra nel forward come argomento separato.
+
+```text
+training history
+  ↓ produce
+parametri correnti θ
+  ↓ insieme all'input x determinano
+hidden representation hᵢ(x; θ)
+```
+
+A parità di architettura, input e parametri correnti, il forward produce le stesse hidden representation indipendentemente dal percorso seguito dal training per raggiungere quei parametri:
+
+```text
+θ_A = θ_B
+      e stesso x
+          ↓
+hᵢ(x; θ_A) = hᵢ(x; θ_B)
+```
+
+Questa affermazione riguarda la rete feed-forward deterministica corrente. Componenti stocastici o stato operativo aggiuntivo, che introdurremo eventualmente più avanti, richiederebbero di specificare anche tali condizioni.
+
 ### Il caso concreto di TinyNet
 
 La rete didattica di MyTorch è:
