@@ -39,5 +39,14 @@ The number of components in a hidden representation. It is an architectural choi
 ## Hidden State
 In recurrent architectures, an internal representation passed from one sequence step to the next, such as `h_t = f(x_t, h_{t-1}; θ)`. This specialized temporal meaning does not apply to every hidden representation in a feed-forward network.
 
+## Neuron
+A single computational unit or output coordinate of a layer. For a fully connected layer, unit `j` computes a scalar pre-activation such as `z_j = Σ_i W_ji h_i + b_j`. The values of all units are normally collected in one activation Tensor; a neuron is not usually a separate Tensor object.
+
+## Pre-activation
+The intermediate Tensor `z` produced by a parametrized transformation before applying its activation function, for example `z = Wh + b`.
+
+## Post-activation
+The Tensor `h = a(z)` produced after applying an activation function. It is commonly the hidden representation passed to the next layer.
+
 ## Output Head
 The final model component that maps the last hidden representation into the output space required by the task. The hidden space has internally learned coordinates, whereas the prediction's shape and semantics are determined by the target, such as regression values, class scores, or vocabulary logits.

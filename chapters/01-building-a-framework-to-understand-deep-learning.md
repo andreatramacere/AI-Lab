@@ -517,6 +517,216 @@ hᵢ(x; θ_A) = hᵢ(x; θ_B)
 
 Questa affermazione riguarda la rete feed-forward deterministica corrente. Componenti stocastici o stato operativo aggiuntivo, che introdurremo eventualmente più avanti, richiederebbero di specificare anche tali condizioni.
 
+### Ingredienti minimi di una rete feed-forward
+
+Possiamo ora fissare uno schema di riferimento sufficientemente preciso per i capitoli successivi:
+
+```mermaid
+flowchart LR
+    X[Input Tensor x] --> HL1[Hidden layer 1]
+    HL1 --> Z1[Pre-activation Tensor z₁]
+    Z1 --> A1[Activation function]
+    A1 --> H1[Hidden representation Tensor h₁]
+    H1 --> HLS[Altri hidden layer<br/>eventuali]
+    HLS --> HL[Last hidden representation<br/>Tensor h_last]
+    HL --> HEAD[Output head / output layer]
+    HEAD --> P[Prediction Tensor ŷ]
+    T[Target Tensor y] -. determina shape<br/>e semantica attese .-> P
+```
+
+In forma lineare:
+
+```text
+Input Tensor x
+  ↓
+Hidden layer parametrico
+  ↓
+Pre-activation Tensor z
+  ↓
+Activation function
+  ↓
+Hidden representation Tensor h
+  ↓
+eventuali altri hidden layer
+  ↓
+Last hidden representation Tensor h_last
+  ↓
+Output head
+  ↓
+Prediction Tensor ŷ, congruente con il target y
+```
+
+Gli ingredienti minimi sono i seguenti.
+
+#### 1. Input Tensor
+
+L'input numerico della rete è rappresentato da un `Tensor`:
+
+```text
+x.shape = (in_features,)                  singolo esempio
+X.shape = (batch_size, in_features)       batch
+```
+
+Il Tensor raccoglie le componenti dell'osservazione e costituisce la rappresentazione iniziale `h₀ = x`.
+
+#### 2. Hidden layer
+
+Un hidden layer è un componente interno che trasforma una rappresentazione. In una rete fully connected, cioè completamente connessa, ogni unità di output combina tutte le unità ricevute:
+
+```text
+z = Wh + b
+```
+
+È hidden perché si trova tra i confini di input e output. Il layer può possedere `Parameter`, come weight e bias.
+
+#### 3. Neuroni, unità e Tensor
+
+Un neurone, o unità, non è normalmente rappresentato da un `Tensor` indipendente. È una singola componente di calcolo del layer:
+
+```text
+zⱼ = Σᵢ Wⱼᵢhᵢ + bⱼ
+```
+
+Il layer contiene molte unità. I loro valori vengono raccolti in un unico `Tensor`:
+
+```text
+singolo neurone j             valore scalare zⱼ
+gruppo di n neuroni           Tensor z con shape (n,)
+batch su n neuroni            Tensor Z con shape (batch_size, n)
+```
+
+Quindi:
+
+```text
+NEURONE / UNITÀ
+  una coordinata della trasformazione
+
+TENSOR DI ACTIVATION
+  raccoglie i valori prodotti da tutte le unità del layer
+```
+
+Anche i parametri non sono in genere memorizzati come un Tensor separato per neurone: i pesi di tutte le unità sono raccolti nella matrice `W`, mentre i bias sono raccolti nel vettore `b`.
+
+#### 4. Pre-activation Tensor
+
+Il risultato del calcolo parametrico prima della funzione di attivazione è:
+
+```text
+z = Wh + b
+```
+
+`z` è un Tensor intermedio. Ogni sua componente `zⱼ` è il valore pre-activation di una unità.
+
+#### 5. Activation function
+
+La funzione di attivazione trasforma `z` in una nuova rappresentazione:
+
+```text
+h = a(z)
+```
+
+In una rete semplice viene applicata elemento per elemento. Introduce la non-linearità necessaria affinché la composizione di più layer possa rappresentare funzioni più ricche di una singola trasformazione affine.
+
+La funzione è un componente; `h` è il Tensor di valori che essa produce.
+
+#### 6. Hidden representation Tensor
+
+`h` raccoglie le activation post-attivazione delle unità del layer:
+
+```text
+h = [h₀, h₁, ..., hₙ₋₁]
+```
+
+È il valore che viene passato al layer successivo. Una rete profonda produce una sequenza di rappresentazioni:
+
+```text
+h₁ → h₂ → ... → h_last
+```
+
+#### 7. Last hidden representation
+
+`h_last` è l'ultima rappresentazione interna prima dell'output head. È ancora un `Tensor`:
+
+```text
+h_last.shape = (hidden_dimension,)
+```
+
+oppure, per un batch:
+
+```text
+H_last.shape = (batch_size, hidden_dimension)
+```
+
+Non è ancora necessariamente la prediction. La sua shape e le sue coordinate appartengono allo spazio interno appreso dal modello.
+
+#### 8. Output head o output layer
+
+L'output head prende `h_last` e la mappa nello spazio del task:
+
+```text
+ŷ = head(h_last)
+```
+
+Spesso la testa è un ultimo layer `Linear`, ma può includere altre operazioni a seconda del task.
+
+La sua responsabilità non è restituire la shape dell'input. È produrre la shape e la semantica richieste dal target:
+
+```text
+regressione scalare
+  input (20,) → hidden (64,) → prediction (1,) → target (1,)
+
+classificazione a 5 classi
+  input (20,) → hidden (64,) → prediction (5,) → target definito su 5 classi
+
+language model
+  hidden (d_model,) → logits (vocabulary_size,)
+```
+
+La relazione corretta è quindi:
+
+```text
+prediction.shape ≈ shape richiesta dal target / dalla loss
+```
+
+non:
+
+```text
+prediction.shape = input.shape
+```
+
+#### 9. Prediction Tensor
+
+La prediction è il `Tensor` finale prodotto dal modello. È l'unico valore del forward a cui il task assegna direttamente una semantica esterna:
+
+```text
+hidden representation    significato interno appreso
+prediction               significato definito dal problema
+```
+
+La loss confronterà questa prediction con il target e collegherà il modello al training loop.
+
+### Formula canonica
+
+Per una rete feed-forward con `L` trasformazioni nascoste:
+
+```text
+h₀ = x
+
+per l = 1, ..., L:
+    zₗ = Wₗhₗ₋₁ + bₗ
+    hₗ = aₗ(zₗ)
+
+ŷ = head(h_L)
+```
+
+Questa formula sarà lo schema di riferimento. Le architetture successive — convoluzionali, ricorrenti e Transformer — modificheranno il tipo di trasformazione e l'organizzazione delle rappresentazioni, ma conserveranno la domanda fondamentale:
+
+```text
+come viene trasformato un Input Tensor
+in rappresentazioni interne
+e infine in una prediction adatta al task?
+```
+
 ### Il caso concreto di TinyNet
 
 La rete didattica di MyTorch è:

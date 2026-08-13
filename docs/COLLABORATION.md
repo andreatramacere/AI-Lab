@@ -172,6 +172,35 @@ DIAGRAMMA RICOMPOSTO
 RITORNO ALLA MAP
 ```
 
+### Schema canonico di una rete feed-forward
+
+Quando il concetto discusso appartiene a una rete feed-forward, la spiegazione deve riferirsi, quando pertinente, a questo schema canonico:
+
+```text
+Input Tensor
+  ↓
+Hidden layer parametrico
+  ↓ pre-activation Tensor z
+Activation function
+  ↓ hidden representation Tensor h
+  ↓ eventuali altri hidden layer
+Last hidden representation Tensor h_last
+  ↓
+Output head / output layer
+  ↓
+Prediction Tensor con shape e semantica congruenti con il target
+```
+
+Lo schema va adattato senza forzature: non tutte le architetture hanno layer fully connected, activation element-wise o una singola testa di output. Ogni variazione deve però essere spiegata rispetto a questa anatomia di riferimento.
+
+Devono essere preservate queste distinzioni:
+
+- un neurone è una singola unità di calcolo, non normalmente un `Tensor` autonomo;
+- le activation di un gruppo di neuroni sono raccolte in un `Tensor`;
+- un hidden layer è un componente della rete;
+- una hidden representation è un valore intermedio prodotto dal layer;
+- l'output head mappa l'ultima hidden representation nello spazio del target, non necessariamente nello spazio o nella shape dell'input.
+
 ## Regola — Ogni nuovo ente deve essere introdotto
 
 Ogni volta che compare per la prima volta un ente, un acronimo o un termine specifico dell'infrastruttura delle reti neurali, esso deve essere spiegato almeno intuitivamente prima di essere usato nel ragionamento.
