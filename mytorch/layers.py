@@ -9,14 +9,17 @@ from .parameter import Parameter
 class Linear(Module):
     """Fully connected linear layer.
 
-    Computes:
+    Computes for one vector:
         y = W @ x + b
 
+    Computes for a batch stored row-wise:
+        y = x @ W.T + b
+
     Shapes:
-        x:      (in_features,)
+        x:      (in_features,) or (batch_size, in_features)
         W:      (out_features, in_features)
         b:      (out_features,)
-        output: (out_features,)
+        output: (out_features,) or (batch_size, out_features)
     """
 
     def __init__(self, in_features, out_features):
@@ -39,13 +42,17 @@ class Linear(Module):
 
     def forward(self, x):
         """Apply the linear transformation."""
-        if x.shape != (self.in_features,):
-            raise ValueError(
-                f"Linear expected input shape ({self.in_features},), "
-                f"received {x.shape}."
-            )
+        if x.shape == (self.in_features,):
+            return self.weight @ x + self.bias
 
-        return self.weight @ x + self.bias
+        if len(x.shape) == 2 and x.shape[1] == self.in_features:
+            return x @ self.weight.T + self.bias
+
+        raise ValueError(
+            "Linear expected input shape "
+            f"({self.in_features},) or (batch_size, {self.in_features}), "
+            f"received {x.shape}."
+        )
 
 
 class ReLU(Module):

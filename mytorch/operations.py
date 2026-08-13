@@ -320,65 +320,120 @@ class ReLU(Operation):
         return (grad_x,)
 
 
-class MatMul(Operation):
-    """Matrix-vector multiplication.
+class Transpose(Operation):
+    """Transpose a 2D tensor."""
 
-    Currently supported:
-        matrix.shape == (rows, cols)
-        vector.shape == (cols,)
+    def forward(self, x):
+        if len(x.shape) != 2:
+            raise ValueError("Transpose currently supports only 2D tensors.")
 
-    Output:
-        shape == (rows,)
-    """
-
-    def forward(self, matrix, vector):
-        if len(matrix.shape) != 2:
-            raise ValueError(
-                "The first operand of MatMul must be a 2D matrix."
-            )
-
-        if len(vector.shape) != 1:
-            raise ValueError(
-                "The second operand of MatMul must be a 1D vector."
-            )
-
-        rows, cols = matrix.shape
-
-        if vector.shape[0] != cols:
-            raise ValueError(
-                f"Incompatible MatMul shapes: "
-                f"{matrix.shape} @ {vector.shape}."
-            )
-
-        result = []
-
-        for row in matrix.data:
-            total = sum(
-                weight * value
-                for weight, value in zip(row, vector.data)
-            )
-            result.append(total)
-
-        return result
+        rows, cols = x.shape
+        return [
+            [x.data[row][col] for row in range(rows)]
+            for col in range(cols)
+        ]
 
     def backward(self, grad_output):
-        matrix, vector = self.inputs
-        rows, cols = matrix.shape
+        rows = len(grad_output)
+        cols = len(grad_output[0]) if rows else self.inputs[0].shape[0]
+        grad_x = [
+            [grad_output[row][col] for row in range(rows)]
+            for col in range(cols)
+        ]
+        return (grad_x,)
 
-        grad_matrix = []
-        for i in range(rows):
-            row_grad = []
-            for j in range(cols):
-                row_grad.append(
-                    grad_output[i] * vector.data[j]
-                )
-            grad_matrix.append(row_grad)
 
-        grad_vector = []
-        for j in range(cols):
-            total = 0.0
-            for i in range(rows):
-                total += grad_output[i] * matrix.data[i][j]
-            grad_vector.append(total)
+class MatMul(Operation):
+    """Vector and matrix multiplication for 1D and 2D tensors."""
 
-        return grad_matrix, grad_vector
+    def forward(self, a, b):
+        rank_a = len(a.shape)
+        rank_b = len(b.shape)
+
+        if rank_a not in (1, 2) or rank_b not in (1, 2):
+            raise ValueError("MatMul supports only 1D and 2D tensors.")
+
+        inner_a = a.shape[-1]
+        inner_b = b.shape[0]
+        if inner_a != inner_b:
+            raise ValueError(
+                f"Incompatible MatMul shapes: {a.shape} @ {b.shape}."
+            )
+
+        if rank_a == 1 and rank_b == 1:
+            return sum(x * y for x, y in zip(a.data, b.data))
+
+        if rank_a == 2 and rank_b == 1:
+            return [
+                sum(x * y for x, y in zip(row, b.data))
+                for row in a.data
+            ]
+
+        if rank_a == 1 and rank_b == 2:
+            cols = b.shape[1]
+            return [
+                sum(a.data[k] * b.data[k][j] for k in range(inner_a))
+                for j in range(cols)
+            ]
+
+        rows = a.shape[0]
+        cols = b.shape[1]
+        return [
+            [
+                sum(a.data[i][k] * b.data[k][j] for k in range(inner_a))
+                for j in range(cols)
+            ]
+            for i in range(rows)
+        ]
+
+    def backward(self, grad_output):
+        a, b = self.inputs
+        rank_a = len(a.shape)
+        rank_b = len(b.shape)
+
+        if rank_a == 1 and rank_b == 1:
+            grad_a = [grad_output * value for value in b.data]
+            grad_b = [grad_output * value for value in a.data]
+            return grad_a, grad_b
+
+        if rank_a == 2 and rank_b == 1:
+            rows, inner = a.shape
+            grad_a = [
+                [grad_output[i] * b.data[k] for k in range(inner)]
+                for i in range(rows)
+            ]
+            grad_b = [
+                sum(a.data[i][k] * grad_output[i] for i in range(rows))
+                for k in range(inner)
+            ]
+            return grad_a, grad_b
+
+        if rank_a == 1 and rank_b == 2:
+            inner, cols = b.shape
+            grad_a = [
+                sum(grad_output[j] * b.data[k][j] for j in range(cols))
+                for k in range(inner)
+            ]
+            grad_b = [
+                [a.data[k] * grad_output[j] for j in range(cols)]
+                for k in range(inner)
+            ]
+            return grad_a, grad_b
+
+        rows, inner = a.shape
+        cols = b.shape[1]
+        grad_a = [
+            [
+                sum(grad_output[i][j] * b.data[k][j] for j in range(cols))
+                for k in range(inner)
+            ]
+            for i in range(rows)
+        ]
+        grad_b = [
+            [
+                sum(a.data[i][k] * grad_output[i][j] for i in range(rows))
+                for j in range(cols)
+            ]
+            for k in range(inner)
+        ]
+        return grad_a, grad_b

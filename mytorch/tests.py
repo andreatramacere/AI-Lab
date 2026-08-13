@@ -162,6 +162,71 @@ def test_matmul_backward():
     assert vector.grad == [2.0, 0.0, -1.8]
 
 
+def test_vector_dot_product_backward():
+    """Check vector-vector MatMul and its scalar-output backward."""
+    a = Tensor([1.0, 2.0, 3.0], requires_grad=True)
+    b = Tensor([4.0, 5.0, 6.0], requires_grad=True)
+
+    output = a @ b
+    output.backward()
+
+    assert output.shape == ()
+    assert output.data == 32.0
+    assert a.grad == [4.0, 5.0, 6.0]
+    assert b.grad == [1.0, 2.0, 3.0]
+
+
+def test_vector_matrix_matmul_backward():
+    """Check vector-matrix MatMul and both input gradients."""
+    vector = Tensor([1.0, 2.0], requires_grad=True)
+    matrix = Tensor(
+        [[3.0, 4.0, 5.0], [6.0, 7.0, 8.0]],
+        requires_grad=True,
+    )
+
+    output = vector @ matrix
+    output.sum().backward()
+
+    assert output.data == [15.0, 18.0, 21.0]
+    assert vector.grad == [12.0, 21.0]
+    assert matrix.grad == [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0]]
+
+
+def test_matrix_matrix_matmul_backward():
+    """Check matrix-matrix MatMul and its reverse-mode rules."""
+    a = Tensor(
+        [[1.0, 2.0], [3.0, 4.0]],
+        requires_grad=True,
+    )
+    b = Tensor(
+        [[5.0, 6.0, 7.0], [8.0, 9.0, 10.0]],
+        requires_grad=True,
+    )
+
+    output = a @ b
+    output.sum().backward()
+
+    assert output.data == [[21.0, 24.0, 27.0], [47.0, 54.0, 61.0]]
+    assert a.grad == [[18.0, 27.0], [18.0, 27.0]]
+    assert b.grad == [[4.0, 4.0, 4.0], [6.0, 6.0, 6.0]]
+
+
+def test_transpose_backward():
+    """Check that transpose reverses axes in forward and backward."""
+    x = Tensor(
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        requires_grad=True,
+    )
+    scale = Tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+
+    output = x.T
+    (output * scale).sum().backward()
+
+    assert output.shape == (3, 2)
+    assert output.data == [[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]
+    assert x.grad == [[1.0, 3.0, 5.0], [2.0, 4.0, 6.0]]
+
+
 def test_relu_backward():
     """Check that ReLU blocks gradients for non-positive inputs."""
     x = Tensor(
@@ -209,6 +274,44 @@ def test_linear_backward():
         [2.0, 4.0, 1.0],
     ]
     assert layer.bias.grad == [1.0, 1.0]
+
+
+def test_batched_linear_forward_and_backward():
+    """Check row-wise batches, shared weights, and bias reduction."""
+    layer = Linear(3, 2)
+    layer.weight.data = [
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0],
+    ]
+    layer.bias.data = [0.5, -0.5]
+    batch = Tensor(
+        [[1.0, 0.0, 1.0], [0.0, 2.0, 1.0]],
+        requires_grad=True,
+    )
+
+    output = layer(batch)
+    output.sum().backward()
+
+    assert output.shape == (2, 2)
+    assert output.data == [[4.5, 9.5], [7.5, 15.5]]
+    assert batch.grad == [[5.0, 7.0, 9.0], [5.0, 7.0, 9.0]]
+    assert layer.weight.grad == [[1.0, 2.0, 2.0], [1.0, 2.0, 2.0]]
+    assert layer.bias.grad == [2.0, 2.0]
+
+
+def test_batched_mse_mean_and_backward():
+    """Check that MSE averages over batch and feature dimensions."""
+    prediction = Tensor(
+        [[1.0, 2.0], [3.0, 4.0]],
+        requires_grad=True,
+    )
+    target = Tensor([[0.0, 0.0], [1.0, 1.0]])
+
+    loss = MSELoss()(prediction, target)
+    loss.backward()
+
+    assert_close(loss.data, 4.5)
+    assert prediction.grad == [[0.5, 1.0], [1.0, 1.5]]
 
 
 def test_backward_accumulates_parameter_gradients():
@@ -310,9 +413,15 @@ def run_all():
         test_broadcast_singleton_and_missing_dimensions,
         test_empty_dimension_broadcast,
         test_matmul_backward,
+        test_vector_dot_product_backward,
+        test_vector_matrix_matmul_backward,
+        test_matrix_matrix_matmul_backward,
+        test_transpose_backward,
         test_relu_backward,
         test_mse_backward,
         test_linear_backward,
+        test_batched_linear_forward_and_backward,
+        test_batched_mse_mean_and_backward,
         test_backward_accumulates_parameter_gradients,
         test_sgd_zero_grad,
         test_module_discovers_nested_parameters,

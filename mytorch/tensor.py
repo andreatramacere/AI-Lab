@@ -95,9 +95,19 @@ class Tensor:
         return Multiply()(self, other)
 
     def __matmul__(self, other):
-        """Return matrix-vector multiplication for the currently supported case."""
+        """Return a vector or matrix product."""
         from .operations import MatMul
         return MatMul()(self, other)
+
+    def transpose(self):
+        """Transpose a 2D tensor while preserving its autograd history."""
+        from .operations import Transpose
+        return Transpose()(self)
+
+    @property
+    def T(self):
+        """Return the transpose of a 2D tensor."""
+        return self.transpose()
 
     def __pow__(self, exponent):
         """Raise every tensor element to a fixed numeric exponent."""

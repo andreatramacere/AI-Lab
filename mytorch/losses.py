@@ -28,9 +28,13 @@ class MSELoss:
 
         total = squared_error.sum()
 
-        # Number of scalar elements in the currently supported 1D use case.
-        # For our training examples, prediction is a vector.
-        n = len(prediction.data)
+        n = 1
+        for dimension in prediction.shape:
+            n *= dimension
+
+        if n == 0:
+            raise ValueError("MSELoss is undefined for an empty tensor.")
+
         scale = Tensor(1.0 / n)
 
         return total * scale
