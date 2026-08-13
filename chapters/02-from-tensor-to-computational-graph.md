@@ -473,13 +473,27 @@ Il meccanismo corrente scopre parametri e sottomoduli assegnati direttamente com
 
 ### Matematica
 
-Per un vettore di input `x`, un layer lineare applica la trasformazione affine
+Per un vettore di input `x`, un layer `Linear` applica una trasformazione affine:
 
 ```text
 y = W x + b
 ```
 
-con forme attualmente supportate:
+I due argomenti del costruttore specificano il contratto tra lo spazio di ingresso e quello di uscita:
+
+```python
+Linear(in_features, out_features)
+```
+
+```text
+in_features
+    numero di componenti che il layer deve ricevere
+
+out_features
+    numero di componenti che il layer deve produrre
+```
+
+Le shape attualmente supportate sono:
 
 ```text
 x : (in_features,)
@@ -487,6 +501,37 @@ W : (out_features, in_features)
 b : (out_features,)
 y : (out_features,)
 ```
+
+Ogni riga di `W` contiene i pesi di una componente di output. Per esempio:
+
+```text
+Linear(3, 2)
+
+x.shape      = (3,)
+weight.shape = (2, 3)
+bias.shape   = (2,)
+y.shape      = (2,)
+```
+
+Esplicitamente:
+
+```text
+y₀ = W₀₀x₀ + W₀₁x₁ + W₀₂x₂ + b₀
+y₁ = W₁₀x₀ + W₁₁x₁ + W₁₂x₂ + b₁
+```
+
+Il layer trasforma quindi un punto di uno spazio a tre componenti in un punto di uno spazio a due componenti. Non esiste alcun requisito per cui `in_features` e `out_features` debbano coincidere: cambiare dimensionalità è precisamente una delle funzioni del layer.
+
+La compatibilità richiesta è interna alla moltiplicazione:
+
+```text
+W.shape = (2, 3)
+x.shape =    (3,)
+                    ↑
+        queste dimensioni devono coincidere
+```
+
+La dimensione condivisa viene contratta dalla somma di `MatMul`; rimane la dimensione delle righe di `W`, cioè `out_features`.
 
 ### Architettura e implementazione
 
@@ -522,11 +567,23 @@ bias ──────────────┘
 
 `Linear` non implementa un proprio backward. Non ne ha bisogno: `MatMul` e `Add` hanno già le regole locali necessarie, e Autograd compone i gradienti. È il primo esempio completo del principio secondo cui strutture di livello superiore emergono componendo primitive inferiori.
 
+### Le tre shape da non confondere
+
+Quando si parla della “shape di un layer” si possono intendere tre cose differenti:
+
+```text
+shape dell'input       (in_features,)
+shape dei pesi         (out_features, in_features)
+shape dell'output      (out_features,)
+```
+
+Il `Module` in sé non è un tensore e quindi non possiede una singola `shape`. Possiede invece un contratto input-output e parametri con shape determinate da quel contratto.
+
 ---
 
 ## 2.9 Neural Network: gerarchia di Module
 
-Una rete neurale compare quando più moduli vengono composti per produrre una predizione:
+Una rete neurale compare quando più moduli vengono composti per produrre una prediction:
 
 ```text
 Input → Linear → ReLU → Linear → Prediction
@@ -547,6 +604,119 @@ class TinyNet(Module):
         x = self.layer2(x)
         return x
 ```
+
+### Perché i due `Linear` hanno shape differenti
+
+In `TinyNet`, il primo layer espande la rappresentazione da una componente a quattro:
+
+```text
+layer1 = Linear(1, 4)
+
+input.shape         = (1,)
+layer1.weight.shape = (4, 1)
+layer1.bias.shape   = (4,)
+output.shape        = (4,)
+```
+
+Il secondo layer comprime la rappresentazione da quattro componenti a una:
+
+```text
+layer2 = Linear(4, 1)
+
+input.shape         = (4,)
+layer2.weight.shape = (1, 4)
+layer2.bias.shape   = (1,)
+output.shape        = (1,)
+```
+
+Le matrici dei pesi hanno dunque shape differenti:
+
+```text
+layer1.weight : (4, 1)
+layer2.weight : (1, 4)
+```
+
+Non vengono moltiplicate direttamente tra loro. Ciascun layer moltiplica i propri pesi per il tensore che riceve. La composizione è valida perché l'output del primo ha la shape richiesta dall'input del secondo:
+
+```text
+Linear(1, 4) → output (4,) → input (4,) → Linear(4, 1)
+                       shape di collegamento
+```
+
+La regola generale per comporre due layer è:
+
+```text
+Linear(n, h) → Linear(h, m)
+          ↑              ↑
+          └── dimensione di collegamento
+```
+
+I layer possono quindi avere matrici dei pesi differenti, ma l'interfaccia tra loro deve essere compatibile:
+
+```text
+out_features del layer precedente
+                  =
+in_features del layer successivo
+```
+
+Se scrivessimo invece:
+
+```python
+self.layer1 = Linear(1, 4)
+self.layer2 = Linear(3, 1)
+```
+
+il primo produrrebbe `(4,)`, mentre il secondo richiederebbe `(3,)`. Il controllo in `Linear.forward()` solleverebbe quindi un `ValueError`: non esiste una connessione dimensionale valida.
+
+### Il ruolo di ReLU tra i due layer
+
+`ReLU` non modifica la shape:
+
+```text
+(4,) → ReLU → (4,)
+```
+
+Modifica i valori, introducendo una non linearità. Il flusso completo delle shape è:
+
+```text
+input       Linear(1,4)       ReLU       Linear(4,1)    prediction
+ (1,)  ─────────────────→     (4,)  ─────────────────→    (1,)
+```
+
+Più precisamente:
+
+```text
+(1,) → Linear(1,4) → (4,) → ReLU → (4,) → Linear(4,1) → (1,)
+```
+
+Senza ReLU, la composizione di due trasformazioni affini sarebbe ancora una singola trasformazione affine:
+
+```text
+W₂(W₁x + b₁) + b₂
+= (W₂W₁)x + (W₂b₁ + b₂)
+```
+
+La rappresentazione intermedia a quattro componenti acquista capacità espressiva non lineare proprio perché `ReLU` viene applicata prima del secondo layer.
+
+### Dalle shape alla topologia del modello
+
+La sequenza
+
+```text
+1 → 4 → 1
+```
+
+descrive la larghezza delle rappresentazioni attraversate dal modello:
+
+```text
+1 componente di input
+        ↓
+4 componenti nascoste
+        ↓
+1 componente di output
+```
+
+Il valore `4` non deriva dalla shape dei dati originali: è una scelta architetturale, detta dimensione nascosta. Stabilisce quanti valori intermedi il modello può costruire prima di produrre la prediction.
 
 Questo oggetto svolge tre funzioni:
 
