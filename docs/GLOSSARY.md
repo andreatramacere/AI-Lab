@@ -26,3 +26,12 @@ Rectified Linear Unit. An element-wise activation defined as `ReLU(x) = max(0, x
 
 ## Neural Network
 A composition of Modules whose forward computation maps input Tensors to a prediction.
+
+## Hidden Representation
+An intermediate Tensor produced inside a model while transforming an input into a prediction. It is input-dependent and transient, unlike a Parameter. Its coordinates are learned through the training objective and need not correspond individually to directly interpretable properties.
+
+## Hidden Layer
+A layer located between the input and output boundaries of a model. It produces a hidden representation but is not itself the representation.
+
+## Hidden Dimension
+The number of components in a hidden representation. It is an architectural choice that controls the width of that internal representation.

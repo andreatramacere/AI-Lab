@@ -258,7 +258,136 @@ h₂                     seconda rappresentazione nascosta
 ŷ                      rappresentazione finale / prediction
 ```
 
-Il termine “nascosta” non significa misteriosa o inosservabile. Significa soltanto che quella rappresentazione è interna al modello: non coincide né con l'input fornito né con l'output richiesto.
+### Che cosa significa hidden
+
+`Hidden` significa **interno al modello**. Una hidden representation, o rappresentazione nascosta, è il Tensor intermedio prodotto dalla rete mentre trasforma l'input nella prediction.
+
+```text
+input x
+  ↓ layer
+hidden representation h
+  ↓ layer
+prediction ŷ
+```
+
+È “nascosta” perché il dataset specifica input e target, ma non specifica quali valori debbano assumere le rappresentazioni intermedie:
+
+```text
+OSSERVATO / FORNITO             APPRESO INTERNAMENTE
+input x                         hidden h
+target y
+```
+
+Il training non dice direttamente al modello:
+
+```text
+“la terza componente di h deve rappresentare questa proprietà”
+```
+
+Ottimizza i parametri affinché la prediction riduca la loss. Come conseguenza, la rete costruisce rappresentazioni interne utili a quel compito.
+
+### Che cosa rappresenta
+
+Una hidden representation codifica l'input nel sistema di coordinate appreso dal modello.
+
+```text
+h = φ(x; θ)
+```
+
+Dipende quindi da:
+
+- l'input specifico `x`;
+- i parametri correnti `θ`;
+- le trasformazioni già attraversate;
+- il task e la loss attraverso cui quei parametri sono stati appresi.
+
+In una rete che opera su sorgenti astrofisiche, una rappresentazione nascosta potrebbe organizzare implicitamente combinazioni utili di proprietà spettrali, luminosità, variabilità o morfologia. Non è però garantito che una singola coordinata corrisponda in modo pulito a una singola grandezza fisica. Spesso l'informazione è distribuita tra molte componenti.
+
+```text
+input originale
+  coordinate scelte dal dataset
+        ↓ rete
+hidden representation
+  coordinate apprese perché utili al task
+```
+
+### Hidden non significa Parameter
+
+Una rappresentazione nascosta è uno **stato transitorio della computazione**, non lo stato persistente del modello:
+
+```text
+HIDDEN REPRESENTATION
+  cambia quando cambia l'input
+  viene prodotta durante il forward
+  è un Tensor intermedio
+
+PARAMETER
+  persiste tra esempi e iterazioni
+  appartiene al modello
+  viene aggiornato dall'optimizer
+```
+
+Per input diversi, gli stessi parametri producono hidden representation diverse.
+
+### Hidden representation, hidden layer e hidden dimension
+
+I tre termini sono collegati ma non equivalenti:
+
+```text
+hidden layer
+  componente interno che applica una trasformazione
+
+hidden representation / activation
+  valori prodotti da quel componente per uno specifico input
+
+hidden dimension
+  numero di componenti della rappresentazione prodotta
+```
+
+Per esempio:
+
+```text
+Linear(1, 4)
+```
+
+può produrre, per un certo input:
+
+```text
+h = [0.7, -1.2, 0.3, 2.1]
+```
+
+Qui:
+
+- `Linear(1, 4)` è il layer;
+- `h` è la hidden representation prodotta in quel forward;
+- `4` è la hidden dimension;
+- ciascun valore di `h` è una hidden activation, cioè l'attivazione di una componente nascosta.
+
+Dopo una funzione di attivazione, i valori possono cambiare mantenendo la stessa hidden dimension:
+
+```text
+prima dell'attivazione    [0.7, -1.2, 0.3, 2.1]
+dopo ReLU                 [0.7,  0.0, 0.3, 2.1]
+```
+
+Entrambi sono Tensor intermedi; quando serve precisione, li distingueremo come pre-activation e post-activation.
+
+### Perché serve una rappresentazione nascosta
+
+La rappresentazione nascosta permette al modello di riorganizzare l'informazione prima di produrre l'output:
+
+```text
+input
+  descrizione disponibile del dato
+        ↓
+hidden
+  descrizione interna appresa per il task
+        ↓
+prediction
+  quantità richiesta dal task
+```
+
+La sua dimensionalità è una scelta architetturale. Una hidden dimension più ampia offre più coordinate interne con cui costruire caratteristiche utili, ma aumenta numero di parametri e costo computazionale. Non implica automaticamente una rappresentazione migliore.
 
 Un layer non “contiene” una rappresentazione in modo permanente. La produce durante il forward e la passa al layer successivo.
 
