@@ -187,96 +187,327 @@ Questa non è una semplice lista di classi. È una decomposizione delle responsa
 
 ## 1.4 Anatomia generale di una rete neurale
 
-Prima di scomporre il framework nei suoi componenti, osserviamo l'oggetto complessivo che vogliamo costruire.
+Prima di scomporre il framework nei suoi componenti, osserviamo l'intero sistema. Una rete neurale non è semplicemente una successione di matrici: è una funzione parametrica organizzata in layer, eseguita su dati rappresentati come Tensor e inserita in un ciclo che misura l'errore e modifica i parametri.
 
-Una rete neurale trasforma una rappresentazione in una nuova rappresentazione attraverso una composizione di layer:
+### Diagramma complessivo
 
-```text
-Input
-  ↓
-Layer di ingresso
-  ↓
-Rappresentazione nascosta
-  ↓
-uno o più layer / blocchi
-  ↓
-Rappresentazione di output
-  ↓
-Prediction
+```mermaid
+flowchart LR
+    X[Input x] --> L1[Layer parametrico]
+    P1[(Parameter θ₁)] --> L1
+    L1 --> H1[Rappresentazione h₁]
+    H1 --> A1[Attivazione non lineare]
+    A1 --> H2[Rappresentazione h₂]
+    H2 --> L2[Layer di output]
+    P2[(Parameter θ₂)] --> L2
+    L2 --> YH[Prediction ŷ]
+
+    Y[Target y] --> LOSS[Loss L]
+    YH --> LOSS
+    LOSS --> BW[Backward / Autograd]
+    BW --> G[Gradienti ∂L/∂θ]
+    G --> OPT[Optimizer]
+    OPT --> P1
+    OPT --> P2
 ```
 
-Se `h₀ = x`, possiamo scrivere:
+Il diagramma contiene due flussi differenti:
 
 ```text
-h₁ = φ₁(h₀; θ₁)
-h₂ = φ₂(h₁; θ₂)
- ...
-ŷ  = φₙ(hₙ₋₁; θₙ)
+FORWARD — produzione della prediction
+Input → Layer → Hidden → Activation → Layer → Prediction
+
+TRAINING — modifica del modello
+Prediction + Target → Loss → Backward → Gradients → Optimizer
+                                            ↓
+                                  Parameter aggiornati
+                                            ↓
+                                      nuovo Forward
 ```
 
-La rete completa è la composizione:
+Il forward appartiene al modello. Loss, backward e optimizer appartengono al sistema di training che usa il modello.
+
+### 1. Input
+
+L'input `x` è l'informazione fornita alla rete. Non è ancora “conoscenza” del modello: è il dato su cui il modello deve operare.
+
+Esempi:
+
+- un vettore di misure fisiche;
+- i pixel di un'immagine;
+- una sequenza di token;
+- le feature di un oggetto astronomico;
+- un batch contenente più osservazioni.
+
+Nel framework, l'input viene rappresentato da un `Tensor`, cioè un oggetto che associa valori numerici, shape e informazioni necessarie all'eventuale calcolo dei gradienti.
 
 ```text
-f(x; θ) = φₙ ∘ ... ∘ φ₂ ∘ φ₁(x)
+fenomeno osservato → rappresentazione numerica → Tensor di input
 ```
 
-Un layer riceve un `Tensor` e produce un altro `Tensor`. Può possedere `Parameter`, come `Linear`, oppure essere privo di stato apprendibile, come una funzione di attivazione. Una funzione di attivazione trasforma elemento per elemento l'output di un layer e, quando è non lineare, impedisce a una sequenza di trasformazioni affini di ridursi a una sola trasformazione affine. `ReLU`, introdotta nel capitolo 2, è un esempio di activation layer. Un blocco combina più layer; un modello combina layer e blocchi per produrre la prediction.
+La scelta della rappresentazione determina quale struttura del dato diventa accessibile alla rete.
 
-La stessa rete deve essere letta da quattro prospettive.
+### 2. Rappresentazione
 
-### Matematica: composizione di funzioni
+Una rappresentazione è l'insieme dei valori con cui la rete descrive un input in un determinato punto del forward.
 
 ```text
-x → φ₁ → h₁ → φ₂ → h₂ → ... → ŷ
+h₀ = x                 rappresentazione iniziale
+h₁                     prima rappresentazione nascosta
+h₂                     seconda rappresentazione nascosta
+ŷ                      rappresentazione finale / prediction
 ```
 
-Ogni funzione trasforma la rappresentazione ricevuta. Le non-linearità impediscono alla composizione di collassare in un'unica trasformazione affine.
+Il termine “nascosta” non significa misteriosa o inosservabile. Significa soltanto che quella rappresentazione è interna al modello: non coincide né con l'input fornito né con l'output richiesto.
 
-### Architettura software: gerarchia di componenti
+Un layer non “contiene” una rappresentazione in modo permanente. La produce durante il forward e la passa al layer successivo.
+
+### 3. Layer
+
+Un layer è un componente che trasforma una rappresentazione in un'altra:
 
 ```text
-Model : Module
-├── Layer : Module
-├── Activation : Module
-└── Block : Module
-    ├── Layer : Module
-    └── Activation : Module
+input representation → layer → output representation
 ```
 
-`Module` fornisce un'interfaccia uniforme a layer elementari, blocchi composti e modello completo.
+Matematicamente:
 
-### Stato: insieme dei valori apprendibili
+```text
+hᵢ₊₁ = φᵢ(hᵢ; θᵢ)
+```
+
+Un layer può:
+
+- possedere parametri apprendibili;
+- non possedere parametri e applicare una trasformazione fissa;
+- modificare la dimensionalità della rappresentazione;
+- conservarne la shape ma modificarne i valori;
+- essere composto da altri layer.
+
+In MyTorch, un layer viene implementato come un `Module`. `Module` è però più generale: può rappresentare anche un blocco composto o l'intero modello.
+
+### 4. Layer parametrico
+
+Un layer parametrico possiede valori che il training può modificare. Un esempio è il layer affine `Linear`:
+
+```text
+h = Wx + b
+```
+
+`W` e `b` non sono dati di input e non sono risultati temporanei: sono lo stato apprendibile del layer.
+
+Il layer usa gli stessi parametri per tutti gli esempi che riceve. Imparare significa trovare valori di `W` e `b` che rendano utile la trasformazione per il task.
+
+### 5. Parameter
+
+Un `Parameter` è un `Tensor` che appartiene allo stato apprendibile del modello.
+
+```text
+Tensor
+  valore che partecipa alla computazione
+
+Parameter
+  Tensor che il modello possiede e l'optimizer può aggiornare
+```
+
+I parametri sono presenti prima del forward, vengono letti dai layer durante il forward, ricevono gradienti durante il backward e vengono modificati dall'optimizer.
+
+La conoscenza appresa da una rete risiede principalmente nei valori e nelle relazioni dei suoi parametri, non nel codice della classe che descrive il modello.
+
+### 6. Funzione di attivazione
+
+Una funzione di attivazione trasforma i valori prodotti da un layer, generalmente elemento per elemento. Il suo ruolo principale è introdurre non-linearità.
+
+Senza funzioni non lineari, una catena di layer affini collasserebbe in un'unica trasformazione affine:
+
+```text
+W₂(W₁x + b₁) + b₂
+= (W₂W₁)x + (W₂b₁ + b₂)
+```
+
+La profondità non aggiungerebbe quindi una nuova classe di funzioni. Una activation non lineare tra i layer impedisce questo collasso.
+
+Nel capitolo 2 introdurremo `ReLU` — Rectified Linear Unit — definita da `max(0, x)`. Per ora è sufficiente collocarla qui:
+
+```text
+layer parametrico → activation non lineare → nuovo layer
+```
+
+### 7. Blocco
+
+Un blocco è una composizione riutilizzabile di più layer e operazioni. Introduce un livello di organizzazione intermedio:
 
 ```text
 Model
-├── Parameter θ₁
-├── Parameter θ₂
-└── Parameter θₙ
+├── Block
+│   ├── Layer
+│   ├── Activation
+│   └── Layer
+└── Output Layer
 ```
 
-La struttura del modello stabilisce quali parametri esistono e chi li possiede. Il training modifica i loro valori, non la topologia della rete.
+Nelle reti semplici possiamo comporre direttamente i layer. Nelle architetture moderne, come i Transformer, il blocco diventa l'unità strutturale ripetuta molte volte.
 
-### Esecuzione: una computazione concreta
+### 8. Modello o rete
 
-Durante il forward, layer e operazioni producono Tensor intermedi e costruiscono un grafo dinamico:
+Il modello è la composizione completa che mappa input in prediction:
 
 ```text
-Parameter ─┐
-Input ─────┴→ Operations → hidden → Operations → prediction
+ŷ = f(x; θ)
 ```
 
-La gerarchia del modello esiste prima del forward; il grafo computazionale registra una specifica esecuzione. Autograd percorre quest'ultimo per collegare la loss ai parametri posseduti dalla prima.
+dove `θ` indica collettivamente tutti i parametri posseduti dai suoi layer e blocchi.
 
-Le quattro prospettive descrivono lo stesso oggetto, ma rispondono a domande differenti:
+Il modello stabilisce:
 
-| Prospettiva | Domanda |
-|---|---|
-| Matematica | Quale funzione viene composta? |
-| Architettura | Quali componenti formano il modello? |
-| Stato | Quali valori devono essere appresi? |
-| Esecuzione | Quali operazioni sono avvenute in questo forward? |
+- quali componenti esistono;
+- come sono collegati;
+- quali parametri possiedono;
+- quale sequenza di trasformazioni costituisce il forward.
 
-I capitoli successivi effettueranno un deep dive nei singoli elementi, per poi ricomporli ogni volta in questa anatomia generale.
+Il modello non decide autonomamente quale prediction sia corretta e non aggiorna da solo i propri parametri.
+
+### 9. Prediction
+
+La prediction `ŷ` è l'output prodotto dal modello per un input. La sua interpretazione dipende dal task:
+
+- un valore continuo in regressione;
+- punteggi o probabilità per classi;
+- una sequenza di output;
+- punteggi sui possibili token successivi in un language model.
+
+La prediction è il confine di responsabilità del modello. Durante il training conserva però il collegamento computazionale ai layer e ai parametri che l'hanno prodotta.
+
+### 10. Target
+
+Il target `y` è il riferimento rispetto al quale viene valutata la prediction nel training supervisionato.
+
+```text
+prediction ŷ    ciò che il modello produce
+target y        ciò che il dataset richiede
+```
+
+Il target non è prodotto dal modello e normalmente non è apprendibile. Proviene dai dati o dalla costruzione del task.
+
+### 11. Loss
+
+La loss trasforma il confronto tra prediction e target in un obiettivo numerico, generalmente scalare:
+
+```text
+L = loss(ŷ, y)
+```
+
+La loss definisce che cosa significhi “errore” per il task. Cambiare loss può cambiare ciò che il modello viene incentivato ad apprendere, anche mantenendo invariata la rete.
+
+La loss non aggiorna i parametri. Costruisce la quantità rispetto alla quale verranno calcolati i gradienti.
+
+### 12. Forward
+
+Il forward è l'esecuzione del modello dall'input alla prediction:
+
+```text
+x → f(x; θ) → ŷ
+```
+
+Durante il forward:
+
+- i layer leggono input e parametri;
+- vengono prodotti Tensor intermedi;
+- viene costruito il grafo delle operazioni eseguite;
+- i parametri non vengono modificati.
+
+“Forward” indica quindi sia la direzione concettuale del calcolo sia il metodo con cui un `Module` definisce la propria trasformazione.
+
+### 13. Computational graph
+
+Il grafo computazionale è la storia delle operazioni che hanno prodotto la prediction e, successivamente, la loss.
+
+```text
+Tensor e Parameter → Operations → Tensor intermedi → prediction → loss
+```
+
+Non coincide con il diagramma dei layer. Il diagramma dei layer descrive la struttura del modello; il grafo descrive una sua esecuzione concreta e contiene il dettaglio necessario per il backward.
+
+### 14. Backward e Autograd
+
+Il backward percorre il grafo dalla loss verso gli input e i parametri. `Autograd`, abbreviazione di automatic differentiation, è il meccanismo che coordina questa propagazione automatica delle derivate locali.
+
+```text
+loss → prediction → hidden representations → Parameter
+```
+
+Il backward calcola gradienti. Non modifica ancora i parametri.
+
+### 15. Gradiente
+
+Per un parametro `θ`, il gradiente
+
+```text
+∂L/∂θ
+```
+
+misura la sensibilità locale della loss rispetto a una variazione del parametro. Tutti i parametri del modello ricevono il proprio gradiente attraverso i cammini che li collegano alla loss.
+
+Il gradiente è informazione sul cambiamento della loss; non è di per sé una regola di aggiornamento.
+
+### 16. Optimizer
+
+L'optimizer legge parametri e gradienti e applica una strategia di aggiornamento. Nella forma più semplice della discesa del gradiente:
+
+```text
+θ ← θ - η ∂L/∂θ
+```
+
+dove `η` è il learning rate, cioè la scala del passo.
+
+L'optimizer:
+
+- non produce la prediction;
+- non definisce la loss;
+- non calcola il gradiente;
+- modifica lo stato apprendibile usando gradienti già calcolati.
+
+### 17. Iterazione di training
+
+Una singola iterazione completa è:
+
+```text
+1. input e target
+2. forward del modello
+3. calcolo della loss
+4. backward e gradienti
+5. aggiornamento dei parametri
+6. nuovo forward con il modello modificato
+```
+
+L'apprendimento non risiede in uno di questi ingredienti isolato. Emerge dalla loro cooperazione ripetuta su dati diversi.
+
+### Le quattro viste della stessa rete
+
+Ora possiamo ricomporre gli ingredienti nelle quattro prospettive che useremo nel libro:
+
+| Prospettiva | Oggetto osservato | Domanda |
+|---|---|---|
+| Matematica | `f(x; θ)` come composizione di funzioni | Quale trasformazione viene appresa? |
+| Architettura software | gerarchia di Model, Block, Module e layer | Come è organizzato il sistema? |
+| Stato | insieme dei Parameter | Quali valori persistono e cambiano? |
+| Esecuzione | forward, grafo, backward e update | Che cosa accade in una iterazione? |
+
+```text
+MATEMATICA
+h₁ = φ₁(x; θ₁), h₂ = φ₂(h₁; θ₂), ŷ = φ₃(h₂; θ₃)
+
+ARCHITETTURA
+Model → Block → Layer / Activation
+
+STATO
+θ = {weight₁, bias₁, weight₂, bias₂, ...}
+
+ESECUZIONE
+forward → loss → backward → optimizer → nuovo forward
+```
+
+Questa è la big picture a cui torneremo dopo ogni deep dive. I capitoli successivi non introducono oggetti isolati: ingrandiscono, uno alla volta, gli ingredienti di questo diagramma e mostrano come cooperano nel sistema completo.
 
 ---
 
