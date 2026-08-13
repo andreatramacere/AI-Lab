@@ -955,13 +955,45 @@ il primo produrrebbe `(4,)`, mentre il secondo richiederebbe `(3,)`. Il controll
 
 ### Il ruolo di ReLU tra i due layer
 
+`ReLU` significa **Rectified Linear Unit**, in italiano unità lineare rettificata. È una funzione di attivazione applicata indipendentemente a ogni elemento:
+
+```text
+ReLU(x) = max(0, x)
+```
+
+Intuitivamente agisce come una soglia:
+
+```text
+x < 0    → 0
+x = 0    → 0
+x > 0    → x
+```
+
+Per esempio:
+
+```text
+ReLU([-2, 0, 3, 5]) = [0, 0, 3, 5]
+```
+
+Si chiama “rettificata” perché elimina la parte negativa della funzione identità, lasciando invariata quella positiva. Non possiede `Parameter`: è un layer perché trasforma una rappresentazione, ma non contiene stato apprendibile.
+
+### Dove si colloca nella rete
+
+`ReLU` viene posta tra due layer affini:
+
+```text
+Linear → ReLU → Linear
+```
+
+Il primo `Linear` costruisce una rappresentazione intermedia. `ReLU` decide elemento per elemento quali componenti positive lasciare passare e quali componenti non positive annullare. Il secondo `Linear` combina la rappresentazione risultante.
+
 `ReLU` non modifica la shape:
 
 ```text
 (4,) → ReLU → (4,)
 ```
 
-Modifica i valori, introducendo una non linearità. Il flusso completo delle shape è:
+Modifica soltanto i valori, introducendo una non linearità. Il flusso completo delle shape è:
 
 ```text
 input       Linear(1,4)       ReLU       Linear(4,1)    prediction
@@ -982,6 +1014,50 @@ W₂(W₁x + b₁) + b₂
 ```
 
 La rappresentazione intermedia a quattro componenti acquista capacità espressiva non lineare proprio perché `ReLU` viene applicata prima del secondo layer.
+
+### Forward e backward
+
+Il forward reale in [`mytorch/operations.py`](../mytorch/operations.py) applica la soglia elemento per elemento:
+
+```python
+class ReLU(Operation):
+    def forward(self, x):
+        return _map_unary(
+            x.data,
+            lambda value: max(0.0, value),
+        )
+```
+
+Nel backward, la derivata locale è:
+
+```text
+d ReLU / dx = 1    per x > 0
+d ReLU / dx = 0    per x ≤ 0 nella convenzione di MyTorch
+```
+
+Quindi il gradiente passa nelle componenti positive e viene bloccato nelle altre:
+
+```python
+mask = _map_unary(
+    x.data,
+    lambda value: 1.0 if value > 0 else 0.0,
+)
+
+grad_x = _map_binary(
+    grad_output,
+    mask,
+    lambda g, active: g * active,
+)
+```
+
+Nel punto `x = 0` la funzione non è derivabile in senso classico. MyTorch, come scelta implementativa, assegna derivata `0`. Questa convenzione è sufficiente per il comportamento di Autograd e deve essere distinta dalla definizione matematica fuori dal punto angoloso.
+
+`ReLU` rende dunque possibile una rete non lineare con un meccanismo locale molto semplice:
+
+```text
+forward     filtra i valori non positivi
+backward    filtra i gradienti nelle stesse posizioni
+```
 
 ### Dalle shape alla topologia del modello
 

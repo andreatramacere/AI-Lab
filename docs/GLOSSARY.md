@@ -21,5 +21,8 @@ A reusable neural-network component that organizes Parameters, optional submodul
 ## Linear
 A Module that applies an affine transformation, typically expressed as `y = Wx + b`, by composing primitive tensor Operations with learnable Parameters.
 
+## ReLU
+Rectified Linear Unit. An element-wise activation defined as `ReLU(x) = max(0, x)`. It introduces non-linearity without changing tensor shape or adding learnable Parameters; in MyTorch its backward passes gradients where the input is positive and blocks them elsewhere.
+
 ## Neural Network
 A composition of Modules whose forward computation maps input Tensors to a prediction.

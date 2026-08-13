@@ -220,7 +220,7 @@ La rete completa è la composizione:
 f(x; θ) = φₙ ∘ ... ∘ φ₂ ∘ φ₁(x)
 ```
 
-Un layer riceve un `Tensor` e produce un altro `Tensor`. Può possedere `Parameter`, come `Linear`, oppure essere privo di stato apprendibile, come `ReLU`. Un blocco combina più layer; un modello combina layer e blocchi per produrre la prediction.
+Un layer riceve un `Tensor` e produce un altro `Tensor`. Può possedere `Parameter`, come `Linear`, oppure essere privo di stato apprendibile, come una funzione di attivazione. Una funzione di attivazione trasforma elemento per elemento l'output di un layer e, quando è non lineare, impedisce a una sequenza di trasformazioni affini di ridursi a una sola trasformazione affine. `ReLU`, introdotta nel capitolo 2, è un esempio di activation layer. Un blocco combina più layer; un modello combina layer e blocchi per produrre la prediction.
 
 La stessa rete deve essere letta da quattro prospettive.
 

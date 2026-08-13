@@ -140,6 +140,39 @@ forward dinamico e grafo computazionale
 
 Il capitolo introduttivo presenta sempre l'architettura complessiva della rete. I capitoli successivi possono così effettuare deep dive sui componenti senza perdere l'oggetto finale che stanno costruendo.
 
+## Regola — Ogni nuovo ente deve essere introdotto
+
+Ogni volta che compare per la prima volta un ente, un acronimo o un termine specifico dell'infrastruttura delle reti neurali, esso deve essere spiegato almeno intuitivamente prima di essere usato nel ragionamento.
+
+Per “ente” si intendono, per esempio:
+
+- componenti architetturali come layer, activation, loss, optimizer, embedding e attention;
+- classi e astrazioni del framework come `Tensor`, `Parameter`, `Module` e `Autograd`;
+- operazioni specifiche come `ReLU`, `MatMul` e softmax;
+- acronimi come MSE, SGD, MLP, RNN, CNN, PEFT e LoRA.
+
+L'introduzione minima deve chiarire:
+
+```text
+NOME
+  che cosa significa il nome o l'acronimo
+
+INTUIZIONE
+  che cosa fa, senza presupporre che il lettore lo conosca
+
+POSIZIONE
+  dove si colloca nella MAP o nella rete
+
+RUOLO
+  quale problema risolve e che cosa rende possibile
+```
+
+Quando serve alla comprensione, devono essere aggiunti anche formula, shape, comportamento nel forward e nel backward, e collegamento al codice reale.
+
+Una semplice menzione in un diagramma non costituisce un'introduzione. Se il termine deve apparire prima della sua spiegazione completa, va accompagnato almeno da una breve definizione locale e da un rimando alla sezione che lo sviluppa.
+
+Sono esclusi i concetti generali già appartenenti al background dichiarato del lettore, come vettore, matrice, funzione, derivata, lista, dizionario e classe Python, salvo che assumano nel framework un significato tecnico diverso o più specifico.
+
 ## La MAP guida il libro
 
 La struttura dei capitoli segue sempre la MAP.
