@@ -138,31 +138,66 @@ Il primo calcola valori; il secondo applica la regola differenziale locale.
 
 ### Esempio: moltiplicazione
 
-Per `z = a * b`, la matematica locale è
+Per `z = a * b`, la matematica locale è:
 
 ```text
 ∂z/∂a = b
 ∂z/∂b = a
 ```
 
-L'implementazione combina queste derivate con il gradiente proveniente da valle:
+Queste sono le derivate di `z` rispetto ai suoi input, ma non sono ancora i gradienti che interessano al training. Se una loss scalare `L` dipende da `z`, vogliamo calcolare:
+
+```text
+∂L/∂a
+∂L/∂b
+```
+
+La chain rule fornisce:
+
+```text
+∂L/∂a = (∂L/∂z)(∂z/∂a) = (∂L/∂z)b
+∂L/∂b = (∂L/∂z)(∂z/∂b) = (∂L/∂z)a
+```
+
+Nell'interfaccia di MyTorch:
+
+```text
+grad_output = ∂L/∂z
+```
+
+Di conseguenza, `Multiply.backward()` non restituisce semplicemente `b` e `a`. Combina il gradiente ricevuto da valle con le derivate locali:
 
 ```python
 class Multiply(Operation):
     def backward(self, grad_output):
         a, b = self.inputs
 
-        grad_a = _map_binary(
-            grad_output, b.data, lambda g, y: g * y
+        output_shape = self.output.shape
+
+        grad_a_full = _broadcast_binary(
+            grad_output, output_shape,
+            b.data, b.shape,
+            lambda g, y: g * y,
         )
-        grad_b = _map_binary(
-            grad_output, a.data, lambda g, x: g * x
+        grad_b_full = _broadcast_binary(
+            grad_output, output_shape,
+            a.data, a.shape,
+            lambda g, x: g * x,
+        )
+
+        grad_a = _reduce_broadcast_gradient(
+            grad_a_full, output_shape, a.shape
+        )
+        grad_b = _reduce_broadcast_gradient(
+            grad_b_full, output_shape, b.shape
         )
 
         return grad_a, grad_b
 ```
 
-L'operazione non conosce l'intero modello né la loss. Conosce soltanto i propri input e la propria derivata locale.
+La riduzione finale serve quando uno degli input è stato riutilizzato mediante broadcasting; questo meccanismo sarà analizzato nel capitolo 4. Senza broadcasting, `grad_a_full` e `grad_b_full` hanno già le shape corrette.
+
+L'operazione non conosce l'intero modello né la formula completa della loss. Riceve da valle l'effetto della parte successiva del grafo e conosce la propria trasformazione locale. Queste due informazioni sono sufficienti.
 
 ---
 
@@ -221,6 +256,91 @@ la chain rule fornisce
 ```
 
 Ogni `Operation` calcola il proprio fattore locale. Autograd coordina la loro composizione lungo il grafo.
+
+### Derivata locale e gradiente non sono la stessa cosa
+
+Consideriamo:
+
+```text
+a = [2, 3]
+b = [4, 5]
+z = a * b = [8, 15]
+L = z.sum() = 23
+```
+
+Il grafo è:
+
+```text
+a ─┐
+   ├→ Multiply → z → Sum → L
+b ─┘
+```
+
+La derivata locale di `Multiply` rispetto ad `a` è `b`:
+
+```text
+∂z/∂a = [4, 5]
+```
+
+Il backward, però, parte dalla loss. `Sum.backward()` comunica a `Multiply`:
+
+```text
+grad_output = ∂L/∂z = [1, 1]
+```
+
+`Multiply.backward()` compone le due informazioni:
+
+```text
+∂L/∂a = grad_output * b
+       = [1, 1] * [4, 5]
+       = [4, 5]
+
+∂L/∂b = grad_output * a
+       = [1, 1] * [2, 3]
+       = [2, 3]
+```
+
+In questo esempio il gradiente rispetto ad `a` coincide numericamente con `b` soltanto perché `Sum` invia un vettore di `1`.
+
+Se invece:
+
+```text
+L = sum(z²)
+```
+
+allora l'operazione `Power` invia:
+
+```text
+grad_output = ∂L/∂z = 2z
+```
+
+e `Multiply.backward()` restituisce:
+
+```text
+∂L/∂a = (2z)b
+∂L/∂b = (2z)a
+```
+
+La distinzione generale è:
+
+```text
+derivata locale
+    descrive come l'output dell'Operation cambia rispetto a un input
+
+grad_output
+    descrive come la loss cambia rispetto all'output dell'Operation
+
+grad_input
+    combina le due informazioni mediante la chain rule
+```
+
+In forma compatta:
+
+```text
+grad_input = grad_output × derivata locale
+```
+
+Per tensori multidimensionali questa espressione rappresenta, più precisamente, un prodotto vettore-Jacobiana. MyTorch non costruisce la Jacobiana completa: ogni `backward()` calcola direttamente il suo effetto sul gradiente ricevuto. È questa scelta che rende praticabile la reverse-mode autodiff.
 
 ### Implementazione
 
