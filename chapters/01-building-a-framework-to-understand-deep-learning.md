@@ -270,6 +270,30 @@ hidden representation h
 prediction ŷ
 ```
 
+Una definizione più precisa è:
+
+```text
+hidden representation hᵢ
+  = valore del flusso computazionale
+    in corrispondenza di un confine interno della rete,
+    per uno specifico input x
+    e per gli attuali valori dei parametri θ
+```
+
+Se il modello è:
+
+```text
+x → layer₁ → activation₁ → layer₂ → ŷ
+```
+
+possiamo scegliere come rappresentazione nascosta l'output di `activation₁`:
+
+```text
+h₁ = activation₁(layer₁(x))
+```
+
+`h₁` è quindi **un valore prodotto dal forward**, non un componente della rete.
+
 È “nascosta” perché il dataset specifica input e target, ma non specifica quali valori debbano assumere le rappresentazioni intermedie:
 
 ```text
@@ -311,15 +335,70 @@ hidden representation
   coordinate apprese perché utili al task
 ```
 
+### Che cosa non è una hidden representation
+
+La hidden representation non è:
+
+- il layer che la produce;
+- l'insieme dei layer nascosti;
+- la configurazione architetturale della rete;
+- l'insieme dei pesi del modello;
+- un valore persistente conservato dopo ogni forward.
+
+La distinzione può essere espressa così:
+
+```text
+RETE / MODELLO
+  insieme organizzato di layer
+
+HIDDEN LAYER
+  componente interno della rete
+
+PARAMETER DEL LAYER
+  stato persistente apprendibile del componente
+
+HIDDEN REPRESENTATION
+  valore intermedio prodotto dal componente durante un forward
+```
+
+Dire che una rete “ha due hidden layer” descrive la sua architettura. Dire che, per l'input `x`, “la hidden representation è `h`” descrive il risultato di una sua esecuzione.
+
+### Non è lo stato dei layer dopo il forward
+
+La frase “stato dei layer dopo il forward” sarebbe fuorviante. Il forward normalmente non cambia lo stato apprendibile di un layer: legge i suoi parametri e produce un output.
+
+```text
+layer con Parameter θ + input x
+              ↓ forward
+hidden representation h = φ(x; θ)
+```
+
+Dopo il forward:
+
+```text
+θ    è ancora lo stato persistente del layer
+h    è il risultato intermedio di quella esecuzione
+```
+
+Se eseguiamo lo stesso layer con un altro input:
+
+```text
+hₐ = φ(xₐ; θ)
+hᵦ = φ(xᵦ; θ)
+```
+
+i parametri `θ` sono gli stessi, mentre le rappresentazioni `hₐ` e `hᵦ` sono diverse.
+
 ### Hidden non significa Parameter
 
-Una rappresentazione nascosta è uno **stato transitorio della computazione**, non lo stato persistente del modello:
+Una rappresentazione nascosta è un **valore intermedio e transitorio della computazione**, non lo stato persistente del modello:
 
 ```text
 HIDDEN REPRESENTATION
   cambia quando cambia l'input
   viene prodotta durante il forward
   è un Tensor intermedio
+  può essere eliminata quando la computazione non serve più
 
 PARAMETER
   persiste tra esempi e iterazioni
@@ -328,6 +407,8 @@ PARAMETER
 ```
 
 Per input diversi, gli stessi parametri producono hidden representation diverse.
+
+Durante il training, MyTorch conserva il Tensor intermedio e i suoi collegamenti finché servono al backward. Questa conservazione tecnica non trasforma la rappresentazione in stato apprendibile: serve soltanto a ricostruire le dipendenze della computazione.
 
 ### Hidden representation, hidden layer e hidden dimension
 
@@ -371,6 +452,26 @@ dopo ReLU                 [0.7,  0.0, 0.3, 2.1]
 ```
 
 Entrambi sono Tensor intermedi; quando serve precisione, li distingueremo come pre-activation e post-activation.
+
+La parola “activation” può indicare sia la funzione di attivazione sia, per estensione, il valore che essa produce. Nel laboratorio useremo:
+
+```text
+activation function
+  la trasformazione, per esempio ReLU
+
+activation / hidden representation
+  il Tensor risultante in quel punto del forward
+```
+
+### Nota: hidden state nelle reti ricorrenti
+
+In alcune architetture, soprattutto nelle reti ricorrenti, `hidden state` ha un significato più specifico: è una rappresentazione interna che viene trasferita da un passo della sequenza al successivo.
+
+```text
+hₜ = f(xₜ, hₜ₋₁; θ)
+```
+
+Quell'uso non deve essere retroattivamente applicato alla rete feed-forward corrente. In `TinyNet`, `h` è semplicemente una rappresentazione intermedia del forward; non viene portata da un esempio o da un passo temporale al successivo.
 
 ### Perché serve una rappresentazione nascosta
 
