@@ -607,6 +607,155 @@ TENSOR DI ACTIVATION
 
 Anche i parametri non sono in genere memorizzati come un Tensor separato per neurone: i pesi di tutte le unità sono raccolti nella matrice `W`, mentre i bias sono raccolti nel vettore `b`.
 
+### Schema grafico: layer, neuroni, coordinate e pesi
+
+Consideriamo un layer `Linear(3, 2)`: riceve tre coordinate e possiede due neuroni di output.
+
+```mermaid
+flowchart LR
+    X0[Input coordinate x₀] -->|peso W₀₀| N0[Neurone 0<br/>z₀ = somma pesata + b₀]
+    X1[Input coordinate x₁] -->|peso W₀₁| N0
+    X2[Input coordinate x₂] -->|peso W₀₂| N0
+    B0[(bias b₀)] --> N0
+
+    X0 -->|peso W₁₀| N1[Neurone 1<br/>z₁ = somma pesata + b₁]
+    X1 -->|peso W₁₁| N1
+    X2 -->|peso W₁₂| N1
+    B1[(bias b₁)] --> N1
+
+    N0 --> Z0[Pre-activation z₀]
+    N1 --> Z1[Pre-activation z₁]
+    Z0 --> A0[Activation]
+    Z1 --> A1[Activation]
+    A0 --> H0[Hidden coordinate h₀]
+    A1 --> H1[Hidden coordinate h₁]
+```
+
+Il diagramma rappresenta una rete **fully connected**, cioè completamente connessa: ogni neurone di output riceve tutte le coordinate di input.
+
+```text
+input Tensor x
+  x₀, x₁, x₂                     tre coordinate
+
+Linear(3, 2)
+  neurone 0                      usa W₀₀, W₀₁, W₀₂ e b₀
+  neurone 1                      usa W₁₀, W₁₁, W₁₂ e b₁
+
+output pre-activation Tensor z
+  z₀, z₁                         due coordinate
+```
+
+#### Lettura per neurone
+
+Il neurone `j` calcola una singola coordinata di output:
+
+```text
+zⱼ = Σᵢ Wⱼᵢ xᵢ + bⱼ
+```
+
+Nel caso concreto:
+
+```text
+z₀ = W₀₀x₀ + W₀₁x₁ + W₀₂x₂ + b₀
+z₁ = W₁₀x₀ + W₁₁x₁ + W₁₂x₂ + b₁
+```
+
+Ogni collegamento grafico tra una coordinata di input e un neurone corrisponde quindi a un peso scalare `Wⱼᵢ`.
+
+```text
+xᵢ ── Wⱼᵢ ──→ neurone j
+```
+
+Il bias `bⱼ` appartiene al neurone di output `j` e sposta la sua somma pesata.
+
+#### Lettura come Tensor e matrice
+
+Gli stessi oggetti vengono raccolti in strutture tensoriali:
+
+```text
+x = [x₀, x₁, x₂]                    shape (3,)
+
+W = [[W₀₀, W₀₁, W₀₂],              shape (2, 3)
+     [W₁₀, W₁₁, W₁₂]]
+
+b = [b₀, b₁]                        shape (2,)
+
+z = [z₀, z₁]                        shape (2,)
+```
+
+```mermaid
+flowchart LR
+    X[Input Tensor x<br/>3 coordinate<br/>shape 3] --> MM[MatMul W @ x]
+    W[(Weight Tensor W<br/>2 righe = 2 neuroni<br/>3 colonne = 3 input<br/>shape 2 × 3)] --> MM
+    MM --> S[Somme pesate<br/>shape 2]
+    B[(Bias Tensor b<br/>un bias per neurone<br/>shape 2)] --> ADD[Add]
+    S --> ADD
+    ADD --> Z[Pre-activation Tensor z<br/>una coordinata per neurone<br/>shape 2]
+    Z --> ACT[Activation element-wise]
+    ACT --> H[Hidden representation h<br/>shape 2]
+```
+
+La matrice dei pesi codifica l'intero diagramma dei collegamenti:
+
+```text
+RIGHE DI W
+  una riga per ogni neurone di output
+
+COLONNE DI W
+  una colonna per ogni coordinata di input
+
+ELEMENTO Wⱼᵢ
+  peso del collegamento dalla coordinata xᵢ al neurone j
+```
+
+Per questo:
+
+```text
+W.shape = (out_features, in_features)
+```
+
+e la moltiplicazione
+
+```text
+z = W @ x + b
+```
+
+produce:
+
+```text
+(2, 3) @ (3,) + (2,) → (2,)
+```
+
+La dimensione `3` viene contratta: ogni neurone combina le tre coordinate ricevute. La dimensione `2` rimane: il layer produce un valore per ciascuno dei suoi due neuroni.
+
+#### Dal neurone alla hidden representation
+
+Dopo la funzione di attivazione:
+
+```text
+h₀ = a(z₀)
+h₁ = a(z₁)
+```
+
+i valori delle due unità vengono raccolti nel Tensor:
+
+```text
+h = [h₀, h₁]
+```
+
+Quindi la relazione precisa è:
+
+```text
+neurone j
+  definisce il calcolo di una coordinata zⱼ
+        ↓ activation
+coordinata hidden hⱼ
+        ↓ insieme alle altre coordinate
+hidden representation Tensor h
+```
+
+Il Tensor `h` non è un singolo neurone: è la rappresentazione composta dai valori di tutti i neuroni del layer per quello specifico input.
+
 #### 4. Pre-activation Tensor
 
 Il risultato del calcolo parametrico prima della funzione di attivazione è:

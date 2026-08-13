@@ -42,6 +42,9 @@ In recurrent architectures, an internal representation passed from one sequence 
 ## Neuron
 A single computational unit or output coordinate of a layer. For a fully connected layer, unit `j` computes a scalar pre-activation such as `z_j = Σ_i W_ji h_i + b_j`. The values of all units are normally collected in one activation Tensor; a neuron is not usually a separate Tensor object.
 
+## Fully Connected Layer
+A layer in which every output unit receives every input coordinate. Its weight matrix has shape `(out_features, in_features)`: row `j` contains all weights entering output unit `j`, and element `W_ji` is the connection weight from input coordinate `i` to unit `j`.
+
 ## Pre-activation
 The intermediate Tensor `z` produced by a parametrized transformation before applying its activation function, for example `z = Wh + b`.
 
