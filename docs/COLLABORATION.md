@@ -44,3 +44,25 @@ Quando introduci un nuovo concetto:
 
 - Se esistono più livelli di astrazione, esplicitali ("stiamo parlando di matematica", "stiamo parlando di architettura", "stiamo parlando di implementazione") e non saltare da uno all'altro senza dirlo.
 
+## Consolidamento della sessione
+
+La chat è il luogo in cui si ragiona.
+Il repository è la fonte di verità del laboratorio.
+
+Alla chiusura di ogni sessione ("basta per oggi"), l'assistente deve consolidare tutto ciò che è stato stabilito, aggiornando il repository.
+
+Il consolidamento di fine sessione è responsabilità dell’assistente. Non richiede che il repository sia stato aggiornato durante la conversazione. Il repository viene aggiornato a partire dai contenuti consolidati nella chat.
+
+Ogni informazione deve essere inserita nella sua sede naturale:
+
+- docs/COLLABORATION.md → regole di collaborazione.
+- docs/MAP.md → struttura architetturale del laboratorio.
+- docs/GLOSSARY.md → definizioni consolidate.
+- chapters/ → materiale didattico consolidato.
+- notes/ → idee, dubbi e approfondimenti non ancora consolidati.
+- mytorch/ → codice del framework.
+
+Solo dopo il consolidamento viene generato uno snapshot del laboratorio in formato `AI-Lab-YYYY-MM-DD.tar.gz`, escludendo la directory `.git/`.
+
+## Lingua 
+ quando scrivi nel repo, eccetto COLLABORATION.md, tutta va in Inglese
