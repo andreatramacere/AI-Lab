@@ -82,13 +82,17 @@ La mappa è spaziale, non temporale.
 
 Non esiste un "prima" e un "dopo" assoluto imposto dalla mappa. Prima di entrare nel dettaglio di un componente, individuiamo dove si trova, da cosa dipende, cosa utilizza e chi dipende da lui. Possiamo entrare da qualunque nodo purché manteniamo il contesto architetturale.
 
-## Spiegazione basata sul codice
+## La MAP guida il libro
 
-Quando viene spiegato un componente già implementato nel repository,
-la spiegazione deve sempre essere accompagnata da uno snippet del codice
-presente nel progetto.
+La struttura dei capitoli segue sempre la MAP.
 
-Lo snippet deve essere il più piccolo possibile e contenere solo le
-righe realmente necessarie a comprendere il concetto.
+L'ordine di esposizione è determinato dalla struttura concettuale del laboratorio e non dall'ordine del codice sorgente.
 
-La teoria deve spiegare il codice, non sostituirlo.
+
+## Il codice supporta la spiegazione
+
+Quando un concetto è implementato nel repository, la spiegazione deve essere accompagnata da uno o più snippet di codice reale.
+
+Gli snippet servono a mostrare come il concetto è stato implementato.
+
+La spiegazione rimane il contenuto principale; il codice ne costituisce la verifica concreta.
