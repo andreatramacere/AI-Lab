@@ -31,6 +31,104 @@ def _map_binary(a, b, fn):
     return [_map_binary(x, y, fn) for x, y in zip(a, b)]
 
 
+def _broadcast_shape(shape_a, shape_b):
+    """Return the common broadcast shape using right-aligned dimensions."""
+    result = []
+    rank = max(len(shape_a), len(shape_b))
+
+    padded_a = (1,) * (rank - len(shape_a)) + shape_a
+    padded_b = (1,) * (rank - len(shape_b)) + shape_b
+
+    for dim_a, dim_b in zip(padded_a, padded_b):
+        if dim_a == dim_b:
+            result.append(dim_a)
+            continue
+
+        if dim_a == 1:
+            result.append(dim_b)
+            continue
+
+        if dim_b == 1:
+            result.append(dim_a)
+            continue
+
+        raise ValueError(
+            f"Shapes {shape_a} and {shape_b} are not broadcastable."
+        )
+
+    return tuple(result)
+
+
+def _build_nested(shape, value_at, prefix=()):
+    """Build nested data with shape, obtaining scalar values by index."""
+    if not shape:
+        return value_at(prefix)
+
+    return [
+        _build_nested(shape[1:], value_at, prefix + (index,))
+        for index in range(shape[0])
+    ]
+
+
+def _get_nested(data, index):
+    """Read a scalar from nested data using a tuple index."""
+    value = data
+    for position in index:
+        value = value[position]
+    return value
+
+
+def _project_index(output_index, input_shape):
+    """Map an output index to an input index under broadcasting."""
+    offset = len(output_index) - len(input_shape)
+    return tuple(
+        0 if dimension == 1 else output_index[offset + axis]
+        for axis, dimension in enumerate(input_shape)
+    )
+
+
+def _broadcast_binary(a, shape_a, b, shape_b, fn):
+    """Apply a binary function after broadcasting two nested structures."""
+    output_shape = _broadcast_shape(shape_a, shape_b)
+
+    def value_at(output_index):
+        value_a = _get_nested(a, _project_index(output_index, shape_a))
+        value_b = _get_nested(b, _project_index(output_index, shape_b))
+        return fn(value_a, value_b)
+
+    return _build_nested(output_shape, value_at)
+
+
+def _iter_indices(shape, prefix=()):
+    """Yield every scalar index in a shape."""
+    if not shape:
+        yield prefix
+        return
+
+    for index in range(shape[0]):
+        yield from _iter_indices(shape[1:], prefix + (index,))
+
+
+def _reduce_broadcast_gradient(grad, grad_shape, target_shape):
+    """Sum a broadcasted gradient back to an operand's original shape."""
+    if grad_shape == target_shape:
+        return grad
+
+    totals = {}
+
+    for grad_index in _iter_indices(grad_shape):
+        target_index = _project_index(grad_index, target_shape)
+        totals[target_index] = (
+            totals.get(target_index, 0.0)
+            + _get_nested(grad, grad_index)
+        )
+
+    return _build_nested(
+        target_shape,
+        lambda index: totals.get(index, 0.0),
+    )
+
+
 def _flatten_sum(data):
     """Recursively sum all scalar values in nested numeric data."""
     if _is_number(data):
@@ -71,36 +169,50 @@ class Operation:
         """Return one gradient per input tensor."""
         raise NotImplementedError
 
-    @staticmethod
-    def validate_same_shape(a, b):
-        """Require identical shapes for element-wise binary operations."""
-        if a.shape != b.shape:
-            raise ValueError(
-                f"Incompatible shapes: {a.shape} and {b.shape}."
-            )
-
-
 class Add(Operation):
     """Element-wise addition."""
 
     def forward(self, a, b):
-        self.validate_same_shape(a, b)
-        return _map_binary(a.data, b.data, lambda x, y: x + y)
+        return _broadcast_binary(
+            a.data, a.shape,
+            b.data, b.shape,
+            lambda x, y: x + y,
+        )
 
     def backward(self, grad_output):
-        return grad_output, grad_output
+        a, b = self.inputs
+        output_shape = self.output.shape
+        return (
+            _reduce_broadcast_gradient(
+                grad_output, output_shape, a.shape
+            ),
+            _reduce_broadcast_gradient(
+                grad_output, output_shape, b.shape
+            ),
+        )
 
 
 class Subtract(Operation):
     """Element-wise subtraction."""
 
     def forward(self, a, b):
-        self.validate_same_shape(a, b)
-        return _map_binary(a.data, b.data, lambda x, y: x - y)
+        return _broadcast_binary(
+            a.data, a.shape,
+            b.data, b.shape,
+            lambda x, y: x - y,
+        )
 
     def backward(self, grad_output):
-        grad_a = grad_output
-        grad_b = _map_unary(grad_output, lambda g: -g)
+        a, b = self.inputs
+        output_shape = self.output.shape
+        grad_a = _reduce_broadcast_gradient(
+            grad_output, output_shape, a.shape
+        )
+        grad_b = _reduce_broadcast_gradient(
+            _map_unary(grad_output, lambda g: -g),
+            output_shape,
+            b.shape,
+        )
         return grad_a, grad_b
 
 
@@ -108,21 +220,33 @@ class Multiply(Operation):
     """Element-wise multiplication."""
 
     def forward(self, a, b):
-        self.validate_same_shape(a, b)
-        return _map_binary(a.data, b.data, lambda x, y: x * y)
+        return _broadcast_binary(
+            a.data, a.shape,
+            b.data, b.shape,
+            lambda x, y: x * y,
+        )
 
     def backward(self, grad_output):
         a, b = self.inputs
 
-        grad_a = _map_binary(
-            grad_output,
-            b.data,
+        output_shape = self.output.shape
+
+        grad_a_full = _broadcast_binary(
+            grad_output, output_shape,
+            b.data, b.shape,
             lambda g, y: g * y,
         )
-        grad_b = _map_binary(
-            grad_output,
-            a.data,
+        grad_b_full = _broadcast_binary(
+            grad_output, output_shape,
+            a.data, a.shape,
             lambda g, x: g * x,
+        )
+
+        grad_a = _reduce_broadcast_gradient(
+            grad_a_full, output_shape, a.shape
+        )
+        grad_b = _reduce_broadcast_gradient(
+            grad_b_full, output_shape, b.shape
         )
 
         return grad_a, grad_b

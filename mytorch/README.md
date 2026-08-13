@@ -9,6 +9,7 @@ It currently includes:
 - a dynamic computational graph
 - recursive reverse-mode autodiff
 - gradient accumulation
+- NumPy-style broadcasting for element-wise binary operations
 - element-wise Add, Subtract, Multiply, Power, and ReLU
 - Sum reduction
 - matrix-vector MatMul
@@ -37,7 +38,6 @@ This is intentionally a teaching framework, not a production numerical library.
 
 Not yet supported:
 
-- broadcasting
 - general matrix-matrix multiplication
 - batches
 - NumPy-backed storage

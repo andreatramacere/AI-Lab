@@ -1,9 +1,9 @@
-# AI Lab Map
+# Mappa di AI Lab
 
-The map is architectural, not temporal. It shows where each concept sits and how the layers depend on one another; it does not prescribe a rigid learning order.
+La mappa è architetturale, non temporale. Mostra dove si colloca ogni concetto, da cosa dipende e quali componenti dipendono da esso; non prescrive un ordine di apprendimento rigido.
 
 ```text
-DATA
+DATI
   ↓
 TENSORS
   ↓
@@ -15,9 +15,9 @@ AUTOGRAD
   ↓
 PARAMETERS
   ↓
-MODULES / LAYERS
+MODULES / LAYER
   ↓
-MODEL
+MODELLO
   ↓
 PREDICTION
   ↓
@@ -25,44 +25,76 @@ LOSS
   ↓
 BACKWARD
   ↓
-GRADIENTS
+GRADIENTI
   ↓
 OPTIMIZER
   ↓
-PARAMETER UPDATE
-  ↺ new forward
+AGGIORNAMENTO DEI PARAMETRI
+  ↺ nuovo forward
 ```
 
-## Current architectural layers
+## Livelli architetturali consolidati
 
 ```text
-COMPUTATIONAL CORE
+CORE COMPUTAZIONALE
 Tensor → Operation → Computational Graph → Autograd
 
-MODEL COMPOSITION
+COMPOSIZIONE DEL MODELLO
 Parameter → Module → Linear → Neural Network
 
 TRAINING LOOP
-Prediction → Loss → Backward → Optimizer → Parameter Update
+Prediction → Loss → Backward → Gradients → Optimizer
+     ↑                                      ↓
+     └────────── nuovo Forward ← Parameter Update
 ```
 
-## Longer-range map
+Le relazioni fondamentali tra i tre livelli sono:
 
 ```text
-COMPUTATIONAL CORE
+Autograd
+  scrive i gradienti nei Tensor che richiedono gradiente
+        ↓
+Parameter
+  è un Tensor appartenente allo stato apprendibile del modello
+        ↓
+Module.parameters()
+  espone ricorsivamente i Parameter all'Optimizer
+        ↓
+Optimizer
+  usa i gradienti per modificare esclusivamente i Parameter
+```
+
+## Frontiera architetturale corrente
+
+Il ciclo di training e il broadcasting delle operazioni element-wise sono consolidati. Il prossimo nodo da espandere è il passaggio dal singolo esempio al batch:
+
+```text
+BATCH
   ↓
-NEURAL NETWORKS
+MATMUL GENERALE
+  ↓
+VECTORIZATION
+```
+
+Questa espansione non cambia la separazione tra modello, Autograd e optimizer. Generalizza le operazioni su cui quei livelli sono costruiti.
+
+## Mappa di lungo periodo
+
+```text
+CORE COMPUTAZIONALE
+  ↓
+RETI NEURALI
   ↓
 TRAINING
   ↓
-SCALABILITY
-Broadcasting → Batch → General MatMul → Vectorization
+SCALABILITÀ
+Shape → Broadcasting → Batch → MatMul generale → Vectorization
   ↓
-MODERN DEEP LEARNING
-Initialization → Normalization → Regularization → Adam
+DEEP LEARNING MODERNO
+Inizializzazione → Normalizzazione → Regolarizzazione → Adam
   ↓
-SEQUENCES
-Embedding → Token Representation
+SEQUENZE
+Embedding → Rappresentazione dei token
   ↓
 ATTENTION
 Q/K/V → Attention → Self-Attention → Multi-Head Attention
@@ -71,8 +103,8 @@ TRANSFORMER
 Residual → Normalization → Feed Forward → Transformer Block
   ↓
 LANGUAGE MODEL
-Tokenizer → Causal Mask → Next-token Prediction → Generation
+Tokenizer → Causal Mask → Next-token Prediction → Generazione
   ↓
-DOMAIN EXPERT MODEL
-Domain Corpus → Adaptation / Training → Evaluation
+MODELLO ESPERTO DI DOMINIO
+Corpus di dominio → Adattamento / Training → Valutazione
 ```
