@@ -53,3 +53,6 @@ The Tensor `h = a(z)` produced after applying an activation function. It is comm
 
 ## Output Head
 The final model component that maps the last hidden representation into the output space required by the task. The hidden space has internally learned coordinates, whereas the prediction's shape and semantics are determined by the target, such as regression values, class scores, or vocabulary logits.
+
+## Output Dimension
+The number of coordinates produced by an output head. For a linear head mapping hidden dimension `h` to output dimension `o`, the weight shape is `(o, h)` and the mapping is `(o, h) @ (h,) → (o,)`. It is determined by the task and need not equal the input dimension.

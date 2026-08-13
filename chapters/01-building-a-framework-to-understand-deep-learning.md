@@ -831,16 +831,153 @@ language model
   hidden (d_model,) → logits (vocabulary_size,)
 ```
 
+### Schema grafico: da hidden `(2,)` a prediction `(3,)`
+
+Supponiamo che l'ultima hidden representation abbia due coordinate, mentre il task richieda tre valori di output:
+
+```text
+h_last.shape = (2,)
+target.shape = (3,)
+```
+
+L'output head deve quindi possedere tre neuroni di output. Ognuno legge entrambe le coordinate hidden:
+
+```mermaid
+flowchart LR
+    H0[Hidden coordinate h₀] -->|V₀₀| O0[Output neuron 0<br/>ŷ₀]
+    H1[Hidden coordinate h₁] -->|V₀₁| O0
+    C0[(bias c₀)] --> O0
+
+    H0 -->|V₁₀| O1[Output neuron 1<br/>ŷ₁]
+    H1 -->|V₁₁| O1
+    C1[(bias c₁)] --> O1
+
+    H0 -->|V₂₀| O2[Output neuron 2<br/>ŷ₂]
+    H1 -->|V₂₁| O2
+    C2[(bias c₂)] --> O2
+
+    O0 --> P[Prediction Tensor ŷ<br/>shape 3]
+    O1 --> P
+    O2 --> P
+    T[Target Tensor y<br/>shape 3] -. confronto mediante loss .-> P
+```
+
+In forma tensoriale, la testa è un `Linear(2, 3)`:
+
+```text
+h_last = [h₀, h₁]                         shape (2,)
+
+V = [[V₀₀, V₀₁],                          shape (3, 2)
+     [V₁₀, V₁₁],
+     [V₂₀, V₂₁]]
+
+c = [c₀, c₁, c₂]                          shape (3,)
+
+ŷ = V @ h_last + c                        shape (3,)
+```
+
+Ogni neurone della testa costruisce una coordinata della prediction:
+
+```text
+ŷ₀ = V₀₀h₀ + V₀₁h₁ + c₀
+ŷ₁ = V₁₀h₀ + V₁₁h₁ + c₁
+ŷ₂ = V₂₀h₀ + V₂₁h₁ + c₂
+```
+
+Le shape seguono direttamente da `MatMul`:
+
+```text
+(3, 2) @ (2,) + (3,) → (3,)
+```
+
+La dimensione hidden `2` viene contratta. La dimensione di output `3`, cioè il numero di neuroni della testa, rimane e determina la shape della prediction.
+
+```text
+hidden dimension       2
+  determina quante coordinate legge ogni neurone della testa
+
+output dimension       3
+  determina quanti neuroni possiede la testa
+  e quante coordinate produce la prediction
+```
+
+### Input e target non devono avere la stessa shape
+
+Non esiste una regola generale:
+
+```text
+input.shape = target.shape
+```
+
+Input e target descrivono oggetti con ruoli diversi:
+
+```text
+input
+  informazione disponibile al modello
+
+target
+  quantità che il task chiede di predire
+```
+
+Per esempio:
+
+```text
+input.shape   = (20,)       venti misure osservative
+hidden.shape  = (64,)       rappresentazione interna
+prediction    = (3,)        tre quantità da stimare
+target.shape  = (3,)        tre valori osservati
+```
+
+Qui la rete può essere schematizzata come:
+
+```text
+(20,) → hidden layers → (64,) → Linear(64,3) → (3,)
+ input                               head       prediction
+```
+
+### Prediction e target: compatibilità richiesta dalla loss
+
+Ciò che deve essere compatibile è la prediction con il target secondo il contratto della loss.
+
+Nella `MSELoss` attuale di MyTorch il contratto è particolarmente semplice:
+
+```text
+prediction.shape = target.shape
+```
+
+perché la loss sottrae i due Tensor elemento per elemento:
+
+```text
+MSE = mean((prediction - target)²)
+```
+
+Questa è una proprietà della loss implementata, non una legge universale delle reti neurali.
+
+In una classificazione futura, per esempio, potremmo avere:
+
+```text
+prediction logits.shape = (5,)     cinque punteggi di classe
+target                   = 2       indice scalare della classe corretta
+```
+
+Una cross-entropy può confrontare queste rappresentazioni differenti perché interpreta il target scalare come indice della classe corretta. In quel caso prediction e target sono semanticamente compatibili con la loss, ma non hanno la stessa shape.
+
 La relazione corretta è quindi:
 
 ```text
-prediction.shape ≈ shape richiesta dal target / dalla loss
+prediction e target devono rispettare il contratto della loss
 ```
 
 non:
 
 ```text
 prediction.shape = input.shape
+```
+
+Nel caso specifico della MSE corrente:
+
+```text
+prediction.shape = target.shape
 ```
 
 #### 9. Prediction Tensor
