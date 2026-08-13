@@ -335,6 +335,162 @@ hidden representation
   coordinate apprese perché utili al task
 ```
 
+### Hidden representation, output head e prediction
+
+La hidden representation non è una prediction incompleta. È una descrizione interna che il modello mette a disposizione della parte finale della rete.
+
+La struttura generale è:
+
+```mermaid
+flowchart LR
+    X[Input x<br/>spazio dei dati] --> E[Feature transformation]
+    E --> H[Hidden representation h<br/>spazio interno appreso]
+    H --> O[Output head]
+    O --> P[Prediction ŷ<br/>spazio del target]
+```
+
+L'**output head**, o testa di output, è il componente finale che traduce l'ultima rappresentazione nascosta nello spazio richiesto dal task.
+
+```text
+hidden h
+  descrizione interna appresa
+        ↓ output head
+prediction ŷ
+  quantità con significato definito dal task
+```
+
+La distinzione tra i tre spazi è fondamentale:
+
+```text
+SPAZIO DELL'INPUT
+  coordinate determinate dalla rappresentazione dei dati
+
+SPAZIO HIDDEN
+  coordinate interne scelte indirettamente dal training
+
+SPAZIO DELL'OUTPUT
+  coordinate determinate dal target e dal task
+```
+
+L'output non deve in generale avere una rappresentazione congruente con l'input. Deve avere forma e semantica congruenti con il **target**.
+
+#### Esempio: regressione
+
+```text
+input
+  20 misure osservative
+        ↓
+hidden
+  64 feature interne apprese
+        ↓ output head
+prediction
+  1 valore: redshift stimato
+```
+
+Qui input e output hanno dimensionalità e significati differenti.
+
+#### Esempio: classificazione
+
+```text
+input
+  20 feature di una sorgente
+        ↓
+hidden
+  64 componenti interne
+        ↓ output head
+prediction
+  5 punteggi, uno per classe
+```
+
+Le coordinate hidden non sono le classi. L'output head combina le 64 componenti interne per produrre i cinque valori che possiedono la semantica richiesta dal task.
+
+#### Esempio: language model
+
+```text
+ultima hidden representation di un token
+  vettore interno di dimensione d_model
+        ↓ output head
+logits
+  un punteggio per ogni token del vocabolario
+        ↓ eventuale normalizzazione
+probabilità del prossimo token
+```
+
+`d_model` è la dimensione interna usata dal modello. La dimensione dell'output è invece la dimensione del vocabolario. L'output head collega i due spazi.
+
+### L'ultima hidden representation
+
+Una rete può produrre molte rappresentazioni nascoste:
+
+```text
+x → h₁ → h₂ → h₃ → ŷ
+```
+
+`h₁`, `h₂` e `h₃` sono tutte hidden representation. `h₃` può essere chiamata **ultima hidden representation** perché alimenta direttamente l'output head.
+
+Soltanto in questo senso è ragionevole pensarla come “ciò che precede la prediction”:
+
+```text
+h_last → output head → prediction
+```
+
+Ma `h_last` non ha ancora necessariamente la shape o la semantica della prediction. È il materiale informativo interno da cui l'output head la costruisce.
+
+### Il caso concreto di TinyNet
+
+La rete didattica di MyTorch è:
+
+```text
+x (1,)
+  ↓ Linear(1, 4)
+z (4,)                    pre-activation
+  ↓ ReLU
+h (4,)                    hidden representation
+  ↓ Linear(4, 1)          output head
+ŷ (1,)                    prediction
+```
+
+In formule:
+
+```text
+z = W₁x + b₁
+h = ReLU(z)
+ŷ = W₂h + b₂
+```
+
+Gli oggetti hanno ruoli differenti:
+
+| Oggetto | Che cos'è | Persistente? | Semantica |
+|---|---|---:|---|
+| `W₁, b₁, W₂, b₂` | Parameter | sì | stato apprendibile |
+| `z` | Tensor intermedio | no | combinazione affine interna |
+| `h` | hidden representation | no | feature interne dopo ReLU |
+| `ŷ` | prediction | no | stima nello spazio del target |
+
+Supponiamo che per un input il primo layer produca:
+
+```text
+z = [0.7, -1.2, 0.3, 2.1]
+```
+
+Dopo ReLU:
+
+```text
+h = [0.7, 0.0, 0.3, 2.1]
+```
+
+Questo vettore non è ancora la stima di `x²`. Il secondo `Linear` lo combina:
+
+```text
+ŷ = W₂h + b₂
+```
+
+e produce un solo valore con la stessa forma del target `[x²]`.
+
+La formulazione precisa è quindi:
+
+> L'ultima hidden representation è il valore interno che riassume, nelle coordinate apprese dal modello, l'informazione disponibile prima dell'output head. L'output head la trasforma nella prediction, la cui forma e semantica sono definite dal target del task.
+
 ### Che cosa non è una hidden representation
 
 La hidden representation non è:

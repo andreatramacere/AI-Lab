@@ -38,3 +38,6 @@ The number of components in a hidden representation. It is an architectural choi
 
 ## Hidden State
 In recurrent architectures, an internal representation passed from one sequence step to the next, such as `h_t = f(x_t, h_{t-1}; θ)`. This specialized temporal meaning does not apply to every hidden representation in a feed-forward network.
+
+## Output Head
+The final model component that maps the last hidden representation into the output space required by the task. The hidden space has internally learned coordinates, whereas the prediction's shape and semantics are determined by the target, such as regression values, class scores, or vocabulary logits.
