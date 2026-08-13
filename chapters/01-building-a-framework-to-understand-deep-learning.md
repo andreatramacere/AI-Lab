@@ -647,7 +647,38 @@ output pre-activation Tensor z
 
 #### Lettura per neurone
 
-Il neurone `j` calcola una singola coordinata di output:
+Non esiste una corrispondenza uno-a-uno tra coordinate di input e neuroni.
+
+In `Linear(3, 2)`:
+
+```text
+3 coordinate di input       x₀, x₁, x₂
+2 neuroni di output         neurone 0, neurone 1
+6 collegamenti              3 input × 2 neuroni
+6 pesi                      uno per collegamento
+```
+
+Ogni coordinata di input si collega a **entrambi** i neuroni:
+
+```text
+x₀ ─┬→ neurone 0   con peso W₀₀
+    └→ neurone 1   con peso W₁₀
+
+x₁ ─┬→ neurone 0   con peso W₀₁
+    └→ neurone 1   con peso W₁₁
+
+x₂ ─┬→ neurone 0   con peso W₀₂
+    └→ neurone 1   con peso W₁₂
+```
+
+Equivalentemente, ogni neurone riceve **tutte e tre** le coordinate:
+
+```text
+neurone 0 ← x₀, x₁, x₂
+neurone 1 ← x₀, x₁, x₂
+```
+
+Il neurone `j` calcola poi una singola coordinata di output:
 
 ```text
 zⱼ = Σᵢ Wⱼᵢ xᵢ + bⱼ
@@ -660,11 +691,30 @@ z₀ = W₀₀x₀ + W₀₁x₁ + W₀₂x₂ + b₀
 z₁ = W₁₀x₀ + W₁₁x₁ + W₁₂x₂ + b₁
 ```
 
-Ogni collegamento grafico tra una coordinata di input e un neurone corrisponde quindi a un peso scalare `Wⱼᵢ`.
+La scrittura
 
 ```text
 xᵢ ── Wⱼᵢ ──→ neurone j
 ```
+
+descrive **una singola freccia generica**, non una coppia esclusiva tra `xᵢ` e il neurone `j`.
+
+Gli indici variano indipendentemente:
+
+```text
+i = 0, 1, 2       sceglie una coordinata di input
+j = 0, 1          sceglie un neurone di output
+```
+
+Per ogni coppia `(j, i)` esiste un collegamento e quindi un peso `Wⱼᵢ`:
+
+| Coordinata di input | Verso neurone 0 | Verso neurone 1 |
+|---|---:|---:|
+| `x₀` | `W₀₀` | `W₁₀` |
+| `x₁` | `W₀₁` | `W₁₁` |
+| `x₂` | `W₀₂` | `W₁₂` |
+
+Il numero di neuroni è determinato da `out_features = 2`, non dal numero delle coordinate di input. Il numero di coordinate ricevute da ciascun neurone è determinato da `in_features = 3`.
 
 Il bias `bⱼ` appartiene al neurone di output `j` e sposta la sua somma pesata.
 
