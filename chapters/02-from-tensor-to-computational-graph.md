@@ -64,29 +64,29 @@ Il sottosistema viene mostrato in due versi separati. Il primo diagramma descriv
 
 ```mermaid
 flowchart LR
-    X[Tensor input x]
+    X["Tensor input x"]
 
-    subgraph M[Model — porzione mostrata]
+    subgraph M["Model — porzione mostrata"]
         direction LR
 
-        subgraph L[Linear — layer parametrico]
+        subgraph L["Linear — layer parametrico"]
             direction LR
-            W[(Parameter W)] --> MM[MatMul]
+            W["Parameter W"] --> MM["MatMul"]
             X --> MM
-            MM --> Z1[Tensor Wx]
-            B[(Parameter b)] --> ADD[Add]
+            MM --> Z1["Tensor Wx"]
+            B["Parameter b"] --> ADD["Add"]
             Z1 --> ADD
-            ADD --> Z[Pre-activation z]
+            ADD --> Z["Pre-activation z"]
         end
 
-        subgraph R[ReLU — activation layer]
+        subgraph R["ReLU — activation layer"]
             direction LR
-            Z --> ROP[ReLU Operation]
-            ROP --> H[Hidden representation h]
+            Z --> ROP["ReLU Operation"]
+            ROP --> H["Hidden representation h"]
         end
 
-        H --> REST[Altri layer / output head]
-        REST --> Y[Prediction]
+        H --> REST["Altri layer / output head"]
+        REST --> Y["Prediction"]
     end
 ```
 
@@ -109,19 +109,19 @@ Da questi legami emerge il grafo computazionale che Autograd userà nel verso op
 
 ```mermaid
 flowchart RL
-    L[loss.backward()] --> SEED[Seed ∂L/∂L = 1]
-    SEED --> DOWN[Backward delle operazioni a valle]
-    DOWN --> GH[grad_h = ∂L/∂h]
-    GH --> RB[ReLU.backward]
-    RB --> GZ[grad_z = ∂L/∂z]
-    GZ --> AB[Add.backward]
-    AB --> GB[grad_b = ∂L/∂b]
-    AB --> GZ1[grad_Wx = ∂L/∂Wx]
-    GZ1 --> MB[MatMul.backward]
-    MB --> GW[grad_W = ∂L/∂W]
-    MB --> GX[grad_x = ∂L/∂x, se richiesto]
+    L["loss.backward()"] --> SEED["Seed: ∂L/∂L = 1"]
+    SEED --> DOWN["Backward delle operazioni a valle"]
+    DOWN --> GH["grad_h = ∂L/∂h"]
+    GH --> RB["ReLU.backward()"]
+    RB --> GZ["grad_z = ∂L/∂z"]
+    GZ --> AB["Add.backward()"]
+    AB --> GB["grad_b = ∂L/∂b"]
+    AB --> GZ1["grad_Wx = ∂L/∂Wx"]
+    GZ1 --> MB["MatMul.backward()"]
+    MB --> GW["grad_W = ∂L/∂W"]
+    MB --> GX["grad_x = ∂L/∂x, se richiesto"]
 
-    AG[Autograd coordina l'attraversamento] -.-> RB
+    AG["Autograd coordina l'attraversamento"] -.-> RB
     AG -.-> AB
     AG -.-> MB
 ```
