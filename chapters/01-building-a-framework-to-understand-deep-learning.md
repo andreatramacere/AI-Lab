@@ -487,12 +487,37 @@ Layer i → zᵢ → Activation → hᵢ → Layer i+1
 
 Quando la distinzione è rilevante per formula, backward o interpretazione, useremo esplicitamente `zᵢ` e `hᵢ`.
 
-Non useremo invece il termine prediction per questi valori intermedi:
+Qui **prediction** non significa genericamente “un valore calcolato dalla rete”. Tutti i valori `zᵢ`, `hᵢ` e `ŷ` sono Tensor prodotti durante il forward, ma hanno ruoli differenti:
 
 ```text
-zᵢ, hᵢ    hidden representation interne
-ŷ         prediction finale del modello
+x
+  ↓
+zᵢ, hᵢ
+  valori interni usati dalla rete per continuare il calcolo
+  ↓
+output head
+  ↓
+ŷ
+  valore che oltrepassa il confine di output del modello
+  ed è interpretato secondo il task
 ```
+
+- `zᵢ` e `hᵢ` sono **hidden representation** perché appartengono al calcolo interno. Le loro coordinate hanno una semantica appresa dalla rete e vengono consumate da altri layer;
+- `ŷ` è la **prediction** perché è l'output esposto dal modello. La sua shape e la sua semantica devono rispettare il contratto del task e della loss o dell'eventuale post-processing.
+
+Per esempio, in una classificazione di sorgenti:
+
+```text
+h₂ con shape (64,)
+  64 feature interne apprese; la rete deve ancora elaborarle
+        ↓ output head
+ŷ con shape (5,)
+  5 punteggi, uno per ciascuna classe del task
+```
+
+Non chiamiamo `h₂` “prediction provvisoria”: le sue 64 coordinate non rappresentano ancora le cinque classi. È il materiale interno dal quale l'output head costruisce la prediction.
+
+La distinzione dipende quindi anche dal confine che abbiamo assegnato al modello. Se riutilizzassimo soltanto una parte della rete come **feature extractor**, cioè come componente che trasforma l'input in feature utili senza eseguire il task finale, il suo ultimo `hᵢ` diventerebbe l'output di quel componente, ma non necessariamente una prediction. Nella rete completa rimarrebbe una hidden representation, perché viene ancora passato all'output head.
 
 ### Il ruolo della storia di training
 
