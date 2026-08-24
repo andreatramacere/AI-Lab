@@ -109,7 +109,10 @@ Da questi legami emerge il grafo computazionale che Autograd userà nel verso op
 
 ```mermaid
 flowchart RL
-    GH[grad_h = ∂L/∂h] --> RB[ReLU.backward]
+    L[loss.backward()] --> SEED[Seed ∂L/∂L = 1]
+    SEED --> DOWN[Backward delle operazioni a valle]
+    DOWN --> GH[grad_h = ∂L/∂h]
+    GH --> RB[ReLU.backward]
     RB --> GZ[grad_z = ∂L/∂z]
     GZ --> AB[Add.backward]
     AB --> GB[grad_b = ∂L/∂b]
@@ -123,12 +126,29 @@ flowchart RL
     AG -.-> MB
 ```
 
-Qui non vengono ricalcolati i valori del forward e i layer non implementano un secondo sistema di differenziazione. Autograd segue i legami del grafo e chiama, nell'ordine inverso, il `backward()` delle `Operation` eseguite nel forward:
+Il calcolo dei gradienti non avviene durante il forward. Dopo che il modello ha prodotto la prediction, una **loss** — una quantità scalare che misura il risultato rispetto all'obiettivo — prolunga il grafo a valle del modello. I gradienti vengono calcolati quando il programma invoca:
 
-1. riceve da valle `∂L/∂h`;
-2. `ReLU.backward()` lo trasforma in `∂L/∂z`;
-3. `Add.backward()` produce il contributo per `b` e quello diretto verso `Wx`;
-4. `MatMul.backward()` produce i gradienti di `W` e, se `x.requires_grad=True`, di `x`.
+```python
+loss.backward()
+```
+
+La chiamata inizializza il gradiente della loss rispetto a se stessa con
+
+```text
+∂L/∂L = 1
+```
+
+e avvia Autograd. Le operazioni collocate tra la loss e `h` producono `∂L/∂h`; questo è il `grad_h` con cui il diagramma entra nel blocco `ReLU → Linear`. Non è quindi un gradiente scelto arbitrariamente: è il risultato del backward della parte di grafo situata a valle.
+
+Da quel punto Autograd segue i legami registrati durante il forward e chiama, nell'ordine inverso, il `backward()` delle `Operation`:
+
+1. ogni `backward()` riceve il gradiente della loss rispetto al proprio output, detto `grad_output`;
+2. lo combina con la derivata locale dell'operazione mediante la chain rule;
+3. restituisce un gradiente per ciascun Tensor di input;
+4. Autograd propaga questi risultati all'operazione precedente;
+5. quando un Tensor con `requires_grad=True` riceve un contributo, questo viene accumulato nel suo attributo `.grad`.
+
+Nel blocco mostrato, `ReLU.backward()` trasforma `∂L/∂h` in `∂L/∂z`; `Add.backward()` produce il contributo per `b` e quello diretto verso `Wx`; `MatMul.backward()` produce infine i gradienti di `W` e, se `x.requires_grad=True`, di `x`. Qui non vengono ricalcolati i valori del forward e i layer non implementano un secondo sistema di differenziazione: il calcolo è affidato ai backward locali delle `Operation`, coordinati da Autograd.
 
 Gli ingredienti messi a fuoco nei due diagrammi sono:
 
