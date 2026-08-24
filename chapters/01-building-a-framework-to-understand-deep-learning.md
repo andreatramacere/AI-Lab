@@ -606,25 +606,51 @@ z = Wh + b
 
 #### Neuroni, unità e Tensor
 
-Un neurone, o unità, non è normalmente rappresentato da un `Tensor` indipendente. È una singola componente di calcolo del layer:
+Un neurone, o unità, è una singola **unità di calcolo concettuale** del layer. Il neurone `j` è definito dalla trasformazione che combina le coordinate ricevute e dai parametri che usa:
 
 ```text
 zⱼ = Σᵢ Wⱼᵢhᵢ + bⱼ
 ```
 
-Il layer contiene molte unità. I loro valori vengono raccolti in un unico `Tensor`:
+Bisogna distinguere il componente operativo dal valore prodotto durante una sua esecuzione:
 
 ```text
-singolo neurone j             valore scalare zⱼ
-gruppo di n neuroni           Tensor z con shape (n,)
-batch su n neuroni            Tensor Z con shape (batch_size, n)
+ARCHITETTURA
+neurone j
+  unità di calcolo concettuale del layer
+
+STATO PERSISTENTE
+W[j, :] e b[j]
+  parametri usati dal neurone j
+
+ESECUZIONE
+zⱼ = Σᵢ Wⱼᵢhᵢ + bⱼ
+  valore scalare prodotto per uno specifico input
+
+DOPO L'ATTIVAZIONE
+hⱼ = a(zⱼ)
+  valore post-activation prodotto per quello stesso input
 ```
+
+Il neurone non coincide quindi né con `zⱼ` né con `hⱼ`: questi sono valori transitori che esistono durante uno specifico forward. Il layer contiene concettualmente molte unità e i valori prodotti da tutte le unità vengono raccolti in un unico `Tensor`:
+
+```text
+neurone j                     unità di calcolo concettuale
+esecuzione del neurone j      valore scalare zⱼ, poi eventualmente hⱼ
+esecuzione di n neuroni       Tensor z o h con shape (n,)
+batch eseguito su n neuroni   Tensor Z o H con shape (batch_size, n)
+```
+
+Nell'implementazione tensoriale di MyTorch non esiste normalmente un oggetto software separato per ogni neurone. È il `Linear` nel suo insieme a eseguire simultaneamente il calcolo di tutte le unità mediante `W @ h + b`. Il neurone rimane una componente della descrizione architetturale e operativa del layer, mentre `z` e `h` sono oggetti effettivamente materializzati durante l'esecuzione.
 
 Quindi:
 
 ```text
 NEURONE / UNITÀ
-  una coordinata della trasformazione
+  un'unità di calcolo concettuale del layer
+
+VALORE zⱼ O hⱼ
+  lo scalare prodotto da quella unità per uno specifico input
 
 TENSOR DI ACTIVATION
   raccoglie i valori prodotti da tutte le unità del layer
