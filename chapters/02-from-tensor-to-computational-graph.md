@@ -60,14 +60,31 @@ Il deep dive deve rispondere a una domanda precisa: **come può una gerarchia di
 
 ```mermaid
 flowchart LR
-    X[Tensor input] --> OP1[MatMul Operation]
-    W[(weight Parameter)] --> OP1
-    OP1 --> Z1[Tensor intermedio]
-    B[(bias Parameter)] --> OP2[Add Operation]
-    Z1 --> OP2
-    OP2 --> Z2[Tensor intermedio]
-    Z2 --> ACT[ReLU Operation]
-    ACT --> H[Tensor hidden]
+    X[Tensor input]
+
+    subgraph M[Model]
+        direction LR
+
+        subgraph L[Linear Module / layer]
+            direction LR
+            W[(weight Parameter)] --> OP1[MatMul Operation]
+            OP1 --> Z1[Tensor intermedio]
+            B[(bias Parameter)] --> OP2[Add Operation]
+            Z1 --> OP2
+            OP2 --> Z2[Tensor pre-activation]
+        end
+
+        subgraph R[ReLU Module / layer]
+            direction LR
+            ACT[ReLU Operation] --> H[Tensor hidden]
+        end
+
+        Z2 --> ACT
+        H --> REST[Altri Module / output head]
+        REST --> Y[Prediction Tensor]
+    end
+
+    X --> OP1
 
     OP1 -. creator / inputs .-> G[Computational Graph]
     OP2 -. creator / inputs .-> G
@@ -77,7 +94,7 @@ flowchart LR
     AG --> B
 ```
 
-Il diagramma mostra una singola porzione della rete durante l'esecuzione. I suoi ingredienti sono:
+Il diagramma mette a fuoco un blocco `Linear → ReLU` interno a un modello. Non è un singolo layer: contiene un layer parametrico `Linear`, che calcola la trasformazione affine, e un layer di attivazione `ReLU`, che applica la non linearità. Il nodo “Altri Module / output head” indica in forma abbreviata che la rappresentazione nascosta prosegue nel resto del modello fino alla prediction; le operazioni di quella parte non sono sviluppate nel grafico. Gli ingredienti messi a fuoco sono:
 
 1. **Tensor di input** — porta nella computazione la rappresentazione ricevuta dal layer.
 2. **Parameter** — sono Tensor posseduti dal modello; qui rappresentano peso e bias.
@@ -85,16 +102,11 @@ Il diagramma mostra una singola porzione della rete durante l'esecuzione. I suoi
 4. **Tensor intermedio** — contiene il risultato di un'operazione e il collegamento al proprio `creator`.
 5. **Computational Graph** — non è un contenitore centrale: emerge dai legami tra Tensor e Operation.
 6. **Autograd** — percorre quei legami in senso inverso e compone le derivate locali.
+7. **`Linear` Module / layer** — possiede `weight` e `bias`; il suo forward compone `MatMul` e `Add`.
+8. **`ReLU` Module / layer** — non possiede Parameter; il suo forward applica la `ReLU Operation` alla pre-attivazione.
+9. **Model** — contiene e compone i due layer con i componenti successivi, stabilendo il percorso complessivo dall'input alla prediction.
 
-Il diagramma descrive il livello dell'esecuzione, non mostra ancora il confine software del layer o del modello. In questa porzione, `MatMul` e `Add` sono le operazioni che verranno composte dal forward di un `Linear`, mentre `ReLU` realizza la trasformazione del layer di attivazione. Le sezioni successive risaliranno da queste operazioni alla struttura stabile che le organizza:
-
-```text
-Operations eseguite nel forward
-        ↓ organizzate da
-Module / layer
-        ↓ composti in
-Model
-```
+I confini annidati rendono visibili due strutture differenti. I riquadri `Model`, `Linear` e `ReLU` descrivono l'organizzazione relativamente stabile della rete; i collegamenti tra Tensor e Operation descrivono invece una specifica esecuzione del forward. Il grafo computazionale emerge da questa esecuzione e non coincide con la gerarchia dei `Module`.
 
 I confini da mantenere sono:
 
@@ -104,9 +116,10 @@ STATO PERSISTENTE Parameter
 CALCOLO           Operation eseguite durante il forward
 STORIA            Computational Graph
 DIFFERENZIAZIONE  Autograd e backward locali
+ORGANIZZAZIONE    Model contenente i Module / layer
 ```
 
-Il capitolo parte dagli ingredienti visibili nel diagramma e risale poi al livello organizzativo di `Module`, layer e modello.
+Il capitolo parte dagli ingredienti del core e mostra poi come il livello organizzativo di `Module`, layer e modello li componga senza sostituirli.
 
 ---
 
