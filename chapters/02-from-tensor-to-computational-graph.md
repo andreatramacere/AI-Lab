@@ -85,21 +85,28 @@ Il diagramma mostra una singola porzione della rete durante l'esecuzione. I suoi
 4. **Tensor intermedio** — contiene il risultato di un'operazione e il collegamento al proprio `creator`.
 5. **Computational Graph** — non è un contenitore centrale: emerge dai legami tra Tensor e Operation.
 6. **Autograd** — percorre quei legami in senso inverso e compone le derivate locali.
-7. **Module / layer** — organizza Parameter e forward, ma riusa le Operations del core per il calcolo.
-8. **Model** — compone più Module e stabilisce il percorso complessivo input-prediction.
+
+Il diagramma descrive il livello dell'esecuzione, non mostra ancora il confine software del layer o del modello. In questa porzione, `MatMul` e `Add` sono le operazioni che verranno composte dal forward di un `Linear`, mentre `ReLU` realizza la trasformazione del layer di attivazione. Le sezioni successive risaliranno da queste operazioni alla struttura stabile che le organizza:
+
+```text
+Operations eseguite nel forward
+        ↓ organizzate da
+Module / layer
+        ↓ composti in
+Model
+```
 
 I confini da mantenere sono:
 
 ```text
 DATI              Tensor di input e Tensor intermedi
 STATO PERSISTENTE Parameter
-CALCOLO           Operation e forward
+CALCOLO           Operation eseguite durante il forward
 STORIA            Computational Graph
 DIFFERENZIAZIONE  Autograd e backward locali
-ORGANIZZAZIONE    Module, layer e Model
 ```
 
-Il capitolo parte dagli ingredienti più bassi e risale fino al modello, ricostruendo progressivamente ogni nodo del diagramma.
+Il capitolo parte dagli ingredienti visibili nel diagramma e risale poi al livello organizzativo di `Module`, layer e modello.
 
 ---
 
