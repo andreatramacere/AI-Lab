@@ -74,7 +74,7 @@ flowchart LR
             OP2 --> Z2[Tensor pre-activation]
         end
 
-        subgraph R[ReLU Module / layer]
+        subgraph R[ReLU activation layer]
             direction LR
             ACT[ReLU Operation] --> H[Tensor hidden]
         end
@@ -89,21 +89,30 @@ flowchart LR
     OP1 -. creator / inputs .-> G[Computational Graph]
     OP2 -. creator / inputs .-> G
     ACT -. creator / inputs .-> G
-    G --> AG[Autograd]
-    AG --> W
-    AG --> B
+    G --> AG[Autograd: attraversamento backward]
+    AG -. gradiente da valle .-> H
+    H -. backward .-> ACT
+    ACT -. gradiente .-> Z2
+    Z2 -. backward .-> OP2
+    OP2 -. gradiente .-> Z1
+    OP2 -. gradiente .-> B
+    Z1 -. backward .-> OP1
+    OP1 -. gradiente .-> W
+    OP1 -. gradiente .-> X
 ```
 
-Il diagramma mette a fuoco un blocco `Linear → ReLU` interno a un modello. Non è un singolo layer: contiene un layer parametrico `Linear`, che calcola la trasformazione affine, e un layer di attivazione `ReLU`, che applica la non linearità. Il nodo “Altri Module / output head” indica in forma abbreviata che la rappresentazione nascosta prosegue nel resto del modello fino alla prediction; le operazioni di quella parte non sono sviluppate nel grafico. Gli ingredienti messi a fuoco sono:
+Il diagramma mette a fuoco un blocco `Linear → ReLU` interno a un modello. Non è un singolo layer: contiene un layer parametrico `Linear`, che calcola la trasformazione affine, e un **activation layer** `ReLU`, che applica la funzione di attivazione non lineare. Nel codice entrambi sono sottoclassi di `Module`, ma svolgono ruoli architetturali differenti. Il nodo “Altri Module / output head” indica in forma abbreviata che la rappresentazione nascosta prosegue nel resto del modello fino alla prediction; le operazioni di quella parte non sono sviluppate nel grafico.
+
+Il forward è rappresentato dalle frecce continue da sinistra a destra. Le frecce tratteggiate mostrano invece Autograd che, ricevuto da valle il gradiente rispetto al Tensor nascosto, percorre a ritroso le `Operation` e propaga i contributi fino al Tensor di input e ai `Parameter`. Gli ingredienti messi a fuoco sono:
 
 1. **Tensor di input** — porta nella computazione la rappresentazione ricevuta dal layer.
 2. **Parameter** — sono Tensor posseduti dal modello; qui rappresentano peso e bias.
 3. **Operation** — applica una trasformazione locale e conosce la propria regola di backward.
 4. **Tensor intermedio** — contiene il risultato di un'operazione e il collegamento al proprio `creator`.
 5. **Computational Graph** — non è un contenitore centrale: emerge dai legami tra Tensor e Operation.
-6. **Autograd** — percorre quei legami in senso inverso e compone le derivate locali.
+6. **Autograd** — percorre il grafo in senso inverso, dal gradiente ricevuto da valle fino agli input delle operazioni, e compone le derivate locali.
 7. **`Linear` Module / layer** — possiede `weight` e `bias`; il suo forward compone `MatMul` e `Add`.
-8. **`ReLU` Module / layer** — non possiede Parameter; il suo forward applica la `ReLU Operation` alla pre-attivazione.
+8. **Activation layer `ReLU`** — è un `Module` senza Parameter; il suo forward applica la `ReLU Operation` alla pre-attivazione.
 9. **Model** — contiene e compone i due layer con i componenti successivi, stabilendo il percorso complessivo dall'input alla prediction.
 
 I confini annidati rendono visibili due strutture differenti. I riquadri `Model`, `Linear` e `ReLU` descrivono l'organizzazione relativamente stabile della rete; i collegamenti tra Tensor e Operation descrivono invece una specifica esecuzione del forward. Il grafo computazionale emerge da questa esecuzione e non coincide con la gerarchia dei `Module`.
