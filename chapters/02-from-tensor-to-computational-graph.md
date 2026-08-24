@@ -58,64 +58,91 @@ Il deep dive deve rispondere a una domanda precisa: **come può una gerarchia di
 
 ### Diagramma del sottosistema
 
+Il sottosistema viene mostrato in due versi separati. Il primo diagramma descrive il **forward**: parte dai valori disponibili, esegue le `Operation` e produce una rappresentazione nascosta. Il secondo descrive il **backward**: parte dal gradiente ricevuto da valle e attraversa in senso inverso il grafo costruito dal forward.
+
+#### Forward: dai valori alla rappresentazione
+
 ```mermaid
 flowchart LR
-    X[Tensor input]
+    X[Tensor input x]
 
-    subgraph M[Model]
+    subgraph M[Model — porzione mostrata]
         direction LR
 
-        subgraph L[Linear Module / layer]
+        subgraph L[Linear — layer parametrico]
             direction LR
-            W[(weight Parameter)] --> OP1[MatMul Operation]
-            OP1 --> Z1[Tensor intermedio]
-            B[(bias Parameter)] --> OP2[Add Operation]
-            Z1 --> OP2
-            OP2 --> Z2[Tensor pre-activation]
+            W[(Parameter W)] --> MM[MatMul]
+            X --> MM
+            MM --> Z1[Tensor Wx]
+            B[(Parameter b)] --> ADD[Add]
+            Z1 --> ADD
+            ADD --> Z[Pre-activation z]
         end
 
-        subgraph R[ReLU activation layer]
+        subgraph R[ReLU — activation layer]
             direction LR
-            ACT[ReLU Operation] --> H[Tensor hidden]
+            Z --> ROP[ReLU Operation]
+            ROP --> H[Hidden representation h]
         end
 
-        Z2 --> ACT
-        H --> REST[Altri Module / output head]
-        REST --> Y[Prediction Tensor]
+        H --> REST[Altri layer / output head]
+        REST --> Y[Prediction]
     end
-
-    X --> OP1
-
-    OP1 -. creator / inputs .-> G[Computational Graph]
-    OP2 -. creator / inputs .-> G
-    ACT -. creator / inputs .-> G
-    G --> AG[Autograd: attraversamento backward]
-    AG -. gradiente da valle .-> H
-    H -. backward .-> ACT
-    ACT -. gradiente .-> Z2
-    Z2 -. backward .-> OP2
-    OP2 -. gradiente .-> Z1
-    OP2 -. gradiente .-> B
-    Z1 -. backward .-> OP1
-    OP1 -. gradiente .-> W
-    OP1 -. gradiente .-> X
 ```
 
-Il diagramma mette a fuoco un blocco `Linear → ReLU` interno a un modello. Non è un singolo layer: contiene un layer parametrico `Linear`, che calcola la trasformazione affine, e un **activation layer** `ReLU`, che applica la funzione di attivazione non lineare. Nel codice entrambi sono sottoclassi di `Module`, ma svolgono ruoli architetturali differenti. Il nodo “Altri Module / output head” indica in forma abbreviata che la rappresentazione nascosta prosegue nel resto del modello fino alla prediction; le operazioni di quella parte non sono sviluppate nel grafico.
+Il diagramma mette a fuoco il blocco `Linear → ReLU`, composto da due layer con ruoli differenti. `Linear` è un layer parametrico: possiede `W` e `b` e il suo `forward()` compone `MatMul` e `Add`. `ReLU` è un activation layer senza parametri: il suo `forward()` applica la `ReLU Operation` alla pre-attivazione `z`. Il resto del modello è abbreviato perché non appartiene al deep dive corrente.
 
-Il forward è rappresentato dalle frecce continue da sinistra a destra. Le frecce tratteggiate mostrano invece Autograd che, ricevuto da valle il gradiente rispetto al Tensor nascosto, percorre a ritroso le `Operation` e propaga i contributi fino al Tensor di input e ai `Parameter`. Gli ingredienti messi a fuoco sono:
+Durante questo percorso ogni `Operation` collega il Tensor prodotto all'operazione che lo ha creato e conserva i propri Tensor di input. Il forward produce quindi contemporaneamente valori e storia della computazione:
+
+```text
+VALORI PRODOTTI
+x, W, b → Wx → z → h
+
+LEGAMI REGISTRATI
+output.creator → Operation
+Operation.inputs → Tensor ricevuti
+```
+
+Da questi legami emerge il grafo computazionale che Autograd userà nel verso opposto.
+
+#### Backward: dal gradiente a valle ai gradienti degli input
+
+```mermaid
+flowchart RL
+    GH[grad_h = ∂L/∂h] --> RB[ReLU.backward]
+    RB --> GZ[grad_z = ∂L/∂z]
+    GZ --> AB[Add.backward]
+    AB --> GB[grad_b = ∂L/∂b]
+    AB --> GZ1[grad_Wx = ∂L/∂Wx]
+    GZ1 --> MB[MatMul.backward]
+    MB --> GW[grad_W = ∂L/∂W]
+    MB --> GX[grad_x = ∂L/∂x, se richiesto]
+
+    AG[Autograd coordina l'attraversamento] -.-> RB
+    AG -.-> AB
+    AG -.-> MB
+```
+
+Qui non vengono ricalcolati i valori del forward e i layer non implementano un secondo sistema di differenziazione. Autograd segue i legami del grafo e chiama, nell'ordine inverso, il `backward()` delle `Operation` eseguite nel forward:
+
+1. riceve da valle `∂L/∂h`;
+2. `ReLU.backward()` lo trasforma in `∂L/∂z`;
+3. `Add.backward()` produce il contributo per `b` e quello diretto verso `Wx`;
+4. `MatMul.backward()` produce i gradienti di `W` e, se `x.requires_grad=True`, di `x`.
+
+Gli ingredienti messi a fuoco nei due diagrammi sono:
 
 1. **Tensor di input** — porta nella computazione la rappresentazione ricevuta dal layer.
 2. **Parameter** — sono Tensor posseduti dal modello; qui rappresentano peso e bias.
 3. **Operation** — applica una trasformazione locale e conosce la propria regola di backward.
 4. **Tensor intermedio** — contiene il risultato di un'operazione e il collegamento al proprio `creator`.
-5. **Computational Graph** — non è un contenitore centrale: emerge dai legami tra Tensor e Operation.
-6. **Autograd** — percorre il grafo in senso inverso, dal gradiente ricevuto da valle fino agli input delle operazioni, e compone le derivate locali.
+5. **Computational Graph** — non è un contenitore centrale: emerge durante il forward dai legami tra Tensor e Operation.
+6. **Autograd** — nel backward percorre quei legami in senso inverso e coordina la composizione delle derivate locali.
 7. **`Linear` Module / layer** — possiede `weight` e `bias`; il suo forward compone `MatMul` e `Add`.
 8. **Activation layer `ReLU`** — è un `Module` senza Parameter; il suo forward applica la `ReLU Operation` alla pre-attivazione.
 9. **Model** — contiene e compone i due layer con i componenti successivi, stabilendo il percorso complessivo dall'input alla prediction.
 
-I confini annidati rendono visibili due strutture differenti. I riquadri `Model`, `Linear` e `ReLU` descrivono l'organizzazione relativamente stabile della rete; i collegamenti tra Tensor e Operation descrivono invece una specifica esecuzione del forward. Il grafo computazionale emerge da questa esecuzione e non coincide con la gerarchia dei `Module`.
+Il primo diagramma mostra insieme l'organizzazione stabile dei `Module` e l'esecuzione che essa produce; il secondo conserva soltanto il grafo necessario a leggere il flusso dei gradienti. Il grafo computazionale emerge dall'esecuzione e non coincide con la gerarchia dei `Module`.
 
 I confini da mantenere sono:
 
