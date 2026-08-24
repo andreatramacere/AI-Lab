@@ -40,7 +40,7 @@ The number of components in a hidden representation. It is an architectural choi
 In recurrent architectures, an internal representation passed from one sequence step to the next, such as `h_t = f(x_t, h_{t-1}; θ)`. This specialized temporal meaning does not apply to every hidden representation in a feed-forward network.
 
 ## Neuron
-A single computational unit or output coordinate of a layer. For a fully connected layer, unit `j` computes a scalar pre-activation such as `z_j = Σ_i W_ji h_i + b_j`. The values of all units are normally collected in one activation Tensor; a neuron is not usually a separate Tensor object.
+A conceptual computational unit of a layer, distinct from the scalar value it produces. In a fully connected layer, unit `j` is associated with parameters `W[j, :]` and `b[j]` and, for a specific input, computes the scalar pre-activation `z_j = Σ_i W_ji h_i + b_j`, followed when applicable by `h_j = a(z_j)`. The neuron belongs to the architectural and operational description of the layer; `z_j` and `h_j` are transient execution values. In a tensor-based implementation, neurons are normally not separate software objects: one layer computes all their values together and collects them in a Tensor.
 
 ## Fully Connected Layer
 A layer in which every output unit receives every input coordinate. Its weight matrix has shape `(out_features, in_features)`: row `j` contains all weights entering output unit `j`, and element `W_ji` is the connection weight from input coordinate `i` to unit `j`.
