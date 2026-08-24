@@ -217,19 +217,48 @@ Gli operatori del `Tensor` non implementano direttamente l'algebra. Delegano all
 
 ```python
 def __mul__(self, other):
-    from operations import Multiply
+    from .operations import Multiply
     return Multiply()(self, other)
 
 def __matmul__(self, other):
-    from operations import MatMul
+    from .operations import MatMul
     return MatMul()(self, other)
 ```
 
 Questo dettaglio rende visibile la separazione delle responsabilità: `Tensor` trasporta stato, `Operation` esegue e registra una trasformazione.
 
+### Esempio d'uso: osservare lo stato di un Tensor
+
+```python
+from mytorch import Tensor
+
+x = Tensor(
+    [[1.0, 2.0], [3.0, 4.0]],
+    requires_grad=True,
+)
+
+print(x.data)
+print(x.shape)
+print(x.requires_grad)
+print(x.grad)
+print(x.creator)
+```
+
+Output:
+
+```text
+[[1.0, 2.0], [3.0, 4.0]]
+(2, 2)
+True
+None
+None
+```
+
+`x` è un Tensor foglia: è stato creato direttamente dal programma, quindi non possiede un `creator`. Richiede il gradiente, ma `.grad` rimane `None` finché non viene eseguito un backward da uno scalare che dipende da `x`.
+
 ### Matematica
 
-Se `L` è lo scalare da cui parte la retropropagazione, il campo `x.grad` rappresenta
+Se chiamiamo `L` lo scalare da cui parte la retropropagazione, il campo `x.grad` rappresenta
 
 ```text
 ∂L / ∂x
@@ -288,6 +317,34 @@ def backward(self, grad_output):
 ```
 
 Il primo calcola valori; il secondo applica la regola differenziale locale.
+
+### Esempio d'uso: un'Operation costruisce un collegamento
+
+```python
+from mytorch import Tensor
+
+a = Tensor([2.0, 3.0], requires_grad=True)
+b = Tensor([4.0, 5.0], requires_grad=True)
+z = a * b
+
+print(z.data)
+print(z.shape)
+print(type(z.creator).__name__)
+print(z.creator.inputs[0] is a)
+print(z.creator.inputs[1] is b)
+```
+
+Output:
+
+```text
+[8.0, 15.0]
+(2,)
+Multiply
+True
+True
+```
+
+L'espressione `a * b` invoca `Multiply`: l'Operation produce i valori di `z`, diventa il suo `creator` e conserva riferimenti proprio ai Tensor `a` e `b`. Questi riferimenti sono la memoria locale che renderà possibile il backward.
 
 ### Esempio: moltiplicazione
 
@@ -373,10 +430,30 @@ L       simbolo matematico del suo valore scalare
 Nel seguente esempio la variabile `loss` rappresenta dunque `L`:
 
 ```python
+from mytorch import Tensor
+
+a = Tensor([2.0, 3.0], requires_grad=True)
+b = Tensor([4.0, 5.0], requires_grad=True)
 loss = (a * b).sum()
+
+multiply = loss.creator.inputs[0].creator
+
+print(type(loss.creator).__name__)
+print(type(multiply).__name__)
+print(multiply.inputs[0] is a)
+print(multiply.inputs[1] is b)
 ```
 
-si forma dinamicamente la struttura:
+Output:
+
+```text
+Sum
+Multiply
+True
+True
+```
+
+I collegamenti osservati corrispondono alla struttura costruita dinamicamente:
 
 ```text
 a ─┐
@@ -542,13 +619,31 @@ La chiamata senza argomento è ammessa solo su uno scalare e semina il backward 
 Un tensore può contribuire alla stessa loss attraverso più rami. Per esempio:
 
 ```python
+from mytorch import Tensor
+
 x = Tensor([2.0, 3.0], requires_grad=True)
 y = x + x
 loss = y.sum()
+
+print(loss.data)
+print(x.grad)
+
 loss.backward()
+
+print(loss.grad)
+print(x.grad)
 ```
 
-Qui ogni elemento di `x` contribuisce due volte, quindi `x.grad == [2.0, 2.0]`. Per questo `_accumulate_grad()` somma i contributi invece di sovrascriverli.
+Output:
+
+```text
+10.0
+None
+1.0
+[2.0, 2.0]
+```
+
+Prima di `loss.backward()` nessun gradiente è stato calcolato. La chiamata assegna alla loss il seed `1.0` e percorre il grafo. Ogni elemento di `x` contribuisce alla loss attraverso due rami, quindi `x.grad == [2.0, 2.0]`. Per questo `_accumulate_grad()` somma i contributi invece di sovrascriverli.
 
 ### Limite attuale
 
@@ -688,6 +783,37 @@ class Parameter(Tensor):
     def __init__(self, data):
         super().__init__(data, requires_grad=True)
 ```
+
+### Esempio d'uso: distinguere stato apprendibile e input
+
+```python
+from mytorch import Parameter, Tensor
+
+weight = Parameter([2.0, -1.0])
+x = Tensor([3.0, 4.0], requires_grad=True)
+loss = (weight * x).sum()
+
+print(isinstance(weight, Tensor))
+print(weight.requires_grad)
+print(weight.creator)
+
+loss.backward()
+
+print(weight.grad)
+print(x.grad)
+```
+
+Output:
+
+```text
+True
+True
+None
+[3.0, 4.0]
+[2.0, -1.0]
+```
+
+`weight` e `x` partecipano alle stesse `Operation` e ricevono entrambi un gradiente. Soltanto `weight`, però, è un `Parameter`: il suo tipo dichiara che quel Tensor può appartenere allo stato apprendibile di un modello. `creator` è `None` perché il Parameter esiste prima del forward ed è una foglia del grafo.
 
 `requires_grad=True` è necessario, ma non esaurisce il significato di `Parameter`. Un normale input può richiedere il gradiente senza essere parte dello stato apprendibile. Il tipo `Parameter` permette a `Module` di riconoscere ciò che appartiene al modello.
 
@@ -835,6 +961,42 @@ class Module:
         return params
 ```
 
+### Esempio d'uso: composizione e scoperta ricorsiva
+
+```python
+from mytorch import Linear, Module, Tensor
+
+class TinyBlock(Module):
+    def __init__(self):
+        self.projection = Linear(2, 1)
+
+    def forward(self, x):
+        return self.projection(x)
+
+block = TinyBlock()
+block.projection.weight.data = [[2.0, -1.0]]
+block.projection.bias.data = [0.5]
+
+output = block(Tensor([3.0, 4.0]))
+parameters = block.parameters()
+
+print(output.data)
+print(len(parameters))
+print(parameters[0] is block.projection.weight)
+print(parameters[1] is block.projection.bias)
+```
+
+Output:
+
+```text
+[2.5]
+2
+True
+True
+```
+
+La chiamata `block(...)` viene inoltrata a `TinyBlock.forward()`, che a sua volta invoca il sottomodulo `projection`. `block.parameters()` attraversa quella gerarchia e restituisce riferimenti ai due `Parameter` posseduti dal `Linear`, anche se non sono attributi diretti di `block`.
+
 L'ottimizzatore può così ricevere `model.parameters()` senza conoscere nomi, numero o posizione dei singoli pesi.
 
 Il meccanismo corrente scopre parametri e sottomoduli assegnati direttamente come attributi. Contenitori generici, liste di moduli, serializzazione e gestione dello stato non sono ancora implementati.
@@ -906,7 +1068,7 @@ out_features
     numero di componenti che il layer deve produrre
 ```
 
-Le shape attualmente supportate sono:
+Per il caso a singolo esempio analizzato in questo capitolo, le shape sono:
 
 ```text
 x : (in_features,)
@@ -960,13 +1122,18 @@ class Linear(Module):
         self.bias = Parameter(biases)
 
     def forward(self, x):
-        if x.shape != (self.in_features,):
-            raise ValueError(
-                f"Linear expected input shape ({self.in_features},), "
-                f"received {x.shape}."
-            )
+        if x.shape == (self.in_features,):
+            return self.weight @ x + self.bias
 
-        return self.weight @ x + self.bias
+        if len(x.shape) == 2 and x.shape[1] == self.in_features:
+            return x @ self.weight.T + self.bias
+
+        raise ValueError(
+            "Linear expected input shape "
+            f"({self.in_features},) or "
+            f"(batch_size, {self.in_features}), "
+            f"received {x.shape}."
+        )
 ```
 
 Nel grafo, l'ultima riga diventa:
@@ -979,6 +1146,41 @@ bias ──────────────┘
 ```
 
 `Linear` non implementa un proprio backward. Non ne ha bisogno: `MatMul` e `Add` hanno già le regole locali necessarie, e Autograd compone i gradienti. È il primo esempio completo del principio secondo cui strutture di livello superiore emergono componendo primitive inferiori.
+
+### Esempio d'uso: forward e gradienti di un Linear
+
+```python
+from mytorch import Linear, Tensor
+
+layer = Linear(3, 2)
+layer.weight.data = [
+    [0.5, 1.0, -2.0],
+    [1.5, -1.0, 0.2],
+]
+layer.bias.data = [1.0, 2.0]
+
+x = Tensor([2.0, 4.0, 1.0])
+y = layer(x)
+
+print(y.data)
+print(y.shape)
+
+y.sum().backward()
+
+print(layer.weight.grad)
+print(layer.bias.grad)
+```
+
+Output:
+
+```text
+[4.0, 1.2]
+(2,)
+[[2.0, 4.0, 1.0], [2.0, 4.0, 1.0]]
+[1.0, 1.0]
+```
+
+Il forward applica `Wx + b` e produce due componenti. Il backward della somma raggiunge `weight` e `bias` attraverso `Add` e `MatMul`: il layer espone i gradienti nei propri `Parameter` pur non implementando un `Linear.backward()`.
 
 ### Le tre shape da non confondere
 
@@ -1017,6 +1219,30 @@ class TinyNet(Module):
         x = self.layer2(x)
         return x
 ```
+
+### Esempio d'uso: eseguire il modello e osservarne lo stato
+
+```python
+from mytorch import Tensor
+
+model = TinyNet()
+x = Tensor([2.0])
+prediction = model(x)
+
+print(prediction.shape)
+print(type(prediction.creator).__name__)
+print(len(model.parameters()))
+```
+
+Output:
+
+```text
+(1,)
+Add
+4
+```
+
+La chiamata attraversa i tre sottomoduli e restituisce una prediction con la shape richiesta dall'ultimo `Linear`. Il suo `creator` è l'`Add` finale del secondo layer; `model.parameters()` trova ricorsivamente weight e bias dei due `Linear`, mentre `ReLU` non aggiunge Parameter.
 
 ### Perché i due `Linear` hanno shape differenti
 
@@ -1187,6 +1413,35 @@ forward     filtra i valori non positivi
 backward    filtra i gradienti nelle stesse posizioni
 ```
 
+### Esempio d'uso: valori nel forward e maschera nel backward
+
+```python
+from mytorch import ReLU, Tensor
+
+activation = ReLU()
+x = Tensor([-2.0, 0.0, 3.0, 5.0], requires_grad=True)
+h = activation(x)
+
+print(h.data)
+print(h.shape)
+print(len(activation.parameters()))
+
+h.sum().backward()
+
+print(x.grad)
+```
+
+Output:
+
+```text
+[0.0, 0.0, 3.0, 5.0]
+(4,)
+0
+[0.0, 0.0, 1.0, 1.0]
+```
+
+Il layer conserva la shape e non possiede stato apprendibile. Nel backward il gradiente della somma passa attraverso le componenti in cui l'input era positivo e viene annullato per valori negativi o nulli.
+
 ### Dalle shape alla topologia del modello
 
 La sequenza
@@ -1222,6 +1477,10 @@ Non valuta la qualità della predizione e non aggiorna i parametri. Queste respo
 Il core computazionale, il modello e il training loop diventano osservabili insieme in una singola iterazione:
 
 ```python
+from copy import deepcopy
+
+from mytorch import MSELoss, SGD, Tensor
+
 model = TinyNet()
 loss_fn = MSELoss()
 optimizer = SGD(model.parameters(), lr=0.01)
@@ -1232,9 +1491,30 @@ target = Tensor([4.0])
 optimizer.zero_grad()
 prediction = model(x)
 loss = loss_fn(prediction, target)
+
+before_step = [deepcopy(p.data) for p in model.parameters()]
 loss.backward()
+
+print(prediction.shape)
+print(loss.shape)
+print(all(p.grad is not None for p in model.parameters()))
+
 optimizer.step()
+
+after_step = [p.data for p in model.parameters()]
+print(any(before != after for before, after in zip(before_step, after_step)))
 ```
+
+Output strutturale, indipendente dai valori iniziali casuali:
+
+```text
+(1,)
+()
+True
+True
+```
+
+La prediction ha la shape richiesta dal modello e la loss è scalare. Dopo `loss.backward()` tutti i Parameter hanno ricevuto un gradiente; dopo `optimizer.step()` almeno uno dei loro valori è cambiato.
 
 Nello snippet:
 

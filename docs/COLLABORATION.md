@@ -301,8 +301,43 @@ Quando serve descrivere una sequenza, si usa una lista numerata nel corpo del te
 
 ## Il codice supporta la spiegazione
 
-Quando un concetto è implementato nel repository, la spiegazione deve essere accompagnata da uno o più snippet di codice reale.
+Quando un concetto è implementato nel repository, la spiegazione deve essere accompagnata da codice reale osservato nel repository. Per ogni classe, funzione o componente introdotto sono necessari, quando applicabili, due tipi distinti di snippet:
 
-Gli snippet servono a mostrare come il concetto è stato implementato.
+1. **Snippet di implementazione** — mostra la parte essenziale della definizione reale che concretizza la responsabilità discussa.
+2. **Snippet d'uso** — costruisce un esempio minimo ma eseguibile che mostra come il componente viene istanziato o chiamato e quale risultato o cambiamento di stato produce.
 
-La spiegazione rimane il contenuto principale; il codice ne costituisce la verifica concreta.
+Per esempio, descrivere `Tensor`, `Parameter`, `Module` o `Linear` mostrando soltanto il corpo della classe non è sufficiente. Alla definizione deve seguire un uso concreto coerente con il punto didattico corrente:
+
+```python
+from mytorch import Tensor
+
+x = Tensor([1.0, 2.0], requires_grad=True)
+scale = Tensor(3.0)
+y = (x * scale).sum()
+y.backward()
+
+print(y.data)
+print(x.grad)
+```
+
+Output:
+
+```text
+9.0
+[3.0, 3.0]
+```
+
+Lo snippet d'uso deve rendere osservabile almeno uno degli aspetti pertinenti:
+
+- input e output, inclusi valori e shape quando rilevanti;
+- tipo e ruolo degli oggetti costruiti;
+- collegamenti del grafo come `creator` e `inputs`;
+- stato prima e dopo il backward, come `.grad`;
+- Parameter posseduti ed esposti da un `Module`;
+- stato prima e dopo un aggiornamento, quando si parla di optimizer.
+
+L'output atteso deve essere riportato o spiegato immediatamente dopo lo snippet; il lettore non deve essere costretto a dedurlo. Gli esempi devono usare l'API reale nella sua forma corrente ed essere verificabili nel repository. Se un componente non può essere isolato sensatamente, lo snippet può mostrarlo nel più piccolo flusso end-to-end che ne renda visibile la responsabilità.
+
+Non è necessario ripetere uno snippet d'uso a ogni menzione dello stesso componente. È necessario inserirlo quando il componente viene introdotto o quando una sezione ne presenta un comportamento nuovo, per esempio il backward, il broadcasting o l'uso in batch.
+
+La spiegazione rimane il contenuto principale; lo snippet di implementazione mostra come il concetto è costruito, mentre lo snippet d'uso verifica concretamente che cosa permette di fare.
