@@ -363,7 +363,14 @@ MyTorch non possiede un oggetto centrale `Graph`. Il grafo è distribuito tra:
 - il `creator` conservato da ogni tensore prodotto;
 - gli `inputs` conservati da ogni operazione.
 
-Per l'espressione
+Nel diagramma introduttivo `loss` indicava il Tensor scalare da cui viene chiamato `loss.backward()`. Da questo punto in poi useremo `L` come simbolo matematico per quella stessa quantità:
+
+```text
+loss    nome del Tensor nel codice
+L       simbolo matematico del suo valore scalare
+```
+
+Nel seguente esempio la variabile `loss` rappresenta dunque `L`:
 
 ```python
 loss = (a * b).sum()

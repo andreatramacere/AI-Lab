@@ -250,6 +250,21 @@ Una semplice menzione in un diagramma non costituisce un'introduzione. Se il ter
 
 Sono esclusi i concetti generali già appartenenti al background dichiarato del lettore, come vettore, matrice, funzione, derivata, lista, dizionario e classe Python, salvo che assumano nel framework un significato tecnico diverso o più specifico.
 
+## Regola — Coerenza locale e continuità della notazione
+
+Ogni sezione deve collegarsi esplicitamente a ciò che la precede. Il lettore non deve dedurre da solo se un simbolo, un nome nel codice e un nodo di un diagramma rappresentino lo stesso ente.
+
+In particolare:
+
+- ogni simbolo deve essere definito nel punto in cui compare per la prima volta;
+- lo stesso ente deve conservare, per quanto possibile, lo stesso nome nei diagrammi, nel testo, nelle formule e nel codice;
+- quando si passa da un nome implementativo a un simbolo matematico, la corrispondenza deve essere dichiarata, per esempio `loss` nel codice e `L` nella notazione matematica;
+- un cambio di notazione o di livello di astrazione deve essere segnalato prima di essere usato;
+- l'inizio di una sezione deve richiamare il collegamento necessario con la sezione precedente, se senza tale raccordo il nuovo esempio apparirebbe isolato;
+- una spiegazione successiva non deve essere necessaria per risolvere un'ambiguità introdotta nel testo corrente.
+
+La coerenza non richiede che codice e matematica usino sempre la stessa grafia; richiede che la relazione tra le due rappresentazioni sia esplicita e stabile.
+
 ## La MAP guida il libro
 
 La struttura dei capitoli segue sempre la MAP.
