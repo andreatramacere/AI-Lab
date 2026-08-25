@@ -8,7 +8,7 @@ Conosco bene:
 - voglio imparare implementando, perché devo toccare con mano
 - ho i mattoni, devo costruire la casa, mi serve una mappa (piantina)
 - MyTorch non è un esercizio preparatorio a PyTorch. È il laboratorio attraverso cui comprendere i principi architetturali del Deep Learning moderno. PyTorch sarà il termine di confronto e, quando necessario, il framework di produzione.
-- alla fine vorre creare una piccola che LLM, che vorrei addestrare come esperto, con due target diversi, uno dandogli in 
+- alla fine vorrei creare una piccola che LLM, che vorrei addestrare come esperto, con due target diversi, uno dandogli in 
 pasto dei testi di filosofia, ed una dandogli in pasto dei testi di astrofisica,
 - vorrei diventare in grado di costuire LLM esperte in singoli task, credo sia ottimo per il mercato del lavoro, 
 con preferenza a task scientifici

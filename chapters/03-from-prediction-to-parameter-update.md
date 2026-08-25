@@ -37,6 +37,16 @@ Una rete neurale isolata realizza il contratto:
 input → model(parameters) → prediction
 ```
 
+In notazione matematica indicheremo lo stesso modello con
+
+```text
+ŷ = f(x; θ)
+```
+
+dove `x` è l'input, `θ` è l'insieme dei parametri apprendibili e `ŷ` è la
+prediction. Quando passeremo all'obiettivo useremo `L` per il valore contenuto
+nel `Tensor` chiamato `loss` nel codice.
+
 Il training la colloca in un sistema più ampio:
 
 ```text
@@ -149,7 +159,9 @@ MSE(ŷ, y) =  ───  Σ (ŷᵢ - yᵢ)²
               n  i=1
 ```
 
-La loss riduce molti scarti a un singolo numero. Questo scalare svolge due funzioni:
+Qui `n` è il numero totale di elementi della prediction, non soltanto la
+dimensione del suo primo asse. La loss riduce molti scarti a un singolo numero.
+Questo scalare svolge due funzioni:
 
 1. fornisce un criterio con cui confrontare stati diversi del modello;
 2. diventa la radice da cui avviare la reverse-mode autodiff.
@@ -167,13 +179,25 @@ La loss non appartiene al modello. Il modello produce una prediction; la loss st
 ```python
 error = prediction - target
 squared_error = error ** 2
+
+if prediction.shape == ():
+    return squared_error
+
 total = squared_error.sum()
 
-n = len(prediction.data)
-scale = Tensor(1.0 / n)
+n = 1
+for dimension in prediction.shape:
+    n *= dimension
 
-return total * scale
+if n == 0:
+    raise ValueError("MSELoss is undefined for an empty tensor.")
+
+return total * Tensor(1.0 / n)
 ```
+
+Il ramo scalare evita una riduzione superflua. Per un tensore non scalare, il
+prodotto delle dimensioni realizza la media su tutti gli elementi, inclusi
+eventuali assi di batch e di feature.
 
 Non esiste un `MSEBackward` speciale. Durante il forward si aggiungono al grafo, nell'ordine:
 
@@ -185,6 +209,32 @@ target ─────┘                                      ↑
 ```
 
 Le regole locali di `Subtract`, `Power`, `Sum` e `Multiply` sono sufficienti per propagare il gradiente fino alla prediction e, da lì, ai parametri.
+
+Un uso minimo rende osservabili valore, shape scalare e gradiente rispetto alla
+prediction:
+
+```python
+from mytorch import MSELoss, Tensor
+
+prediction = Tensor([2.0, 4.0], requires_grad=True)
+target = Tensor([1.0, 1.0])
+
+loss = MSELoss()(prediction, target)
+loss.backward()
+
+print(loss.data, loss.shape)
+print(prediction.grad)
+```
+
+Output:
+
+```text
+5.0 ()
+[1.0, 3.0]
+```
+
+Infatti `L = ((2 - 1)² + (4 - 1)²) / 2 = 5` e
+`∂L/∂ŷ = 2(ŷ - y)/2 = [1, 3]`.
 
 ---
 
@@ -297,7 +347,10 @@ Per Stochastic Gradient Descent, la regola è
 θ ← θ - η ∂loss/∂θ
 ```
 
-dove `η` è il learning rate.
+dove `θ` indica un parametro, `∂loss/∂θ` il gradiente accumulato nel
+campo `theta.grad` e `η` il learning rate, cioè la scala del passo compiuto
+nella direzione opposta al gradiente. Nel codice, `loss` rappresenta lo scalare
+matematico `L`, quindi scriveremo equivalentemente `∂L/∂θ`.
 
 ### Implementazione
 
@@ -402,6 +455,49 @@ new_loss       = (5.0 - 5.0)²  = 0.0
 
 In questo esempio il learning rate porta esattamente al target in un passo. Non è una proprietà generale di SGD; è una conseguenza dei valori scelti per rendere trasparente il ciclo.
 
+Lo stesso passo è eseguibile attraverso l'API pubblica corrente:
+
+```python
+from mytorch import Linear, MSELoss, SGD, Tensor
+
+layer = Linear(1, 1)
+layer.weight.data = [[1.0]]
+layer.bias.data = [0.0]
+
+x = Tensor([2.0])
+target = Tensor([5.0])
+loss_fn = MSELoss()
+optimizer = SGD(layer.parameters(), lr=0.1)
+
+optimizer.zero_grad()
+prediction = layer(x)
+loss = loss_fn(prediction, target)
+loss.backward()
+
+print(prediction.data, loss.data)
+print(layer.weight.grad, layer.bias.grad)
+
+optimizer.step()
+new_prediction = layer(x)
+new_loss = loss_fn(new_prediction, target)
+
+print(layer.weight.data, layer.bias.data)
+print(new_prediction.data, new_loss.data)
+```
+
+Output:
+
+```text
+[2.0] 9.0
+[[-12.0]] [-6.0]
+[[2.2]] [0.6000000000000001]
+[5.0] 0.0
+```
+
+La rappresentazione `0.6000000000000001` è il normale risultato
+dell'aritmetica floating-point binaria; matematicamente il bias aggiornato è
+`0.6`.
+
 ---
 
 ## 3.8 Il loop come macchina a stati
@@ -474,7 +570,12 @@ calcolo dei gradienti
 aggiornamento dei parametri
 ```
 
-La limitazione principale non è ora l'assenza di un training loop, ma la sua scala. Il codice opera essenzialmente su singoli vettori, con `MatMul` limitato al caso matrice-vettore e senza broadcasting.
+Alla frontiera didattica raggiunta in questo punto del percorso, la limitazione
+principale non è più l'assenza di un training loop, ma la scala su cui sappiamo
+ancora descriverlo: singoli vettori, `MatMul` matrice-vettore e nessun
+broadcasting. Il repository corrente contiene già le estensioni sviluppate nei
+capitoli 4 e 5; qui isoliamo intenzionalmente il sistema così come si presenta
+prima di quelle generalizzazioni.
 
 Il prossimo cambio architetturale appartiene quindi alla sezione **scalabilità** della MAP:
 

@@ -56,3 +56,27 @@ The final model component that maps the last hidden representation into the outp
 
 ## Output Dimension
 The number of coordinates produced by an output head. For a linear head mapping hidden dimension `h` to output dimension `o`, the weight shape is `(o, h)` and the mapping is `(o, h) @ (h,) → (o,)`. It is determined by the task and need not equal the input dimension.
+
+## Prediction
+Il Tensor esposto al confine di output di un modello. Dipende dai Parameter correnti attraverso il grafo computazionale, mentre la sua shape e la sua semantica sono determinate dal task e dal contratto della loss o del post-processing successivo.
+
+## Target
+Il valore di riferimento fornito dal dataset o dal task rispetto al quale viene valutata una prediction. Nel training supervisionato considerato è esterno al modello e non richiede gradienti.
+
+## Loss
+Un criterio differenziabile che combina una prediction con un target e produce l'obiettivo da ottimizzare, normalmente un Tensor scalare. Appartiene al sistema di training, non al modello, e prolunga il grafo computazionale a valle della prediction.
+
+## Gradient
+La derivata di un obiettivo scalare rispetto a un Tensor o a un Parameter. In MyTorch, Autograd calcola i contributi durante il backward e li accumula nel campo `grad` dell'oggetto.
+
+## Optimizer
+Un componente del sistema di training che legge i gradienti dei Parameter gestiti e applica una regola di aggiornamento ai loro dati numerici. Non calcola i gradienti, non sceglie la loss e non esegue il forward del modello.
+
+## SGD
+Stochastic Gradient Descent. Una regola di ottimizzazione che aggiorna un Parameter `θ` secondo `θ ← θ - η ∂L/∂θ`, dove `L` è la loss e `η` il learning rate. Nel loop corrente di MyTorch, “stochastic” indica che l'aggiornamento deriva da un esempio di training alla volta.
+
+## Learning Rate
+Lo scalare `η` che controlla l'ampiezza dell'aggiornamento prodotto da un optimizer. In SGD scala il passo compiuto nella direzione opposta al gradiente.
+
+## Gradient Accumulation
+La raccolta intenzionale dei contributi di gradiente prodotti da più backward prima di un passo dell'optimizer. Si basa sulla somma dei gradienti anziché sulla loro sovrascrittura e richiede `zero_grad()` soltanto all'inizio di una nuova finestra di accumulazione.
