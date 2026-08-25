@@ -363,6 +363,31 @@ def test_module_discovers_nested_parameters():
     ]
 
 
+def test_module_names_nested_parameters():
+    """Check stable ownership paths for recursively discovered parameters."""
+    class TwoLayerNet(Module):
+        def __init__(self):
+            self.layer1 = Linear(1, 2)
+            self.layer2 = Linear(2, 1)
+
+        def forward(self, x):
+            return self.layer2(self.layer1(x))
+
+    model = TwoLayerNet()
+
+    assert model.named_parameters() == [
+        ("layer1.weight", model.layer1.weight),
+        ("layer1.bias", model.layer1.bias),
+        ("layer2.weight", model.layer2.weight),
+        ("layer2.bias", model.layer2.bias),
+    ]
+
+    assert model.layer1.named_parameters(prefix="encoder") == [
+        ("encoder.weight", model.layer1.weight),
+        ("encoder.bias", model.layer1.bias),
+    ]
+
+
 def test_sgd_step_updates_parameters_only():
     """Check that SGD updates parameters without mutating input data."""
     layer = Linear(1, 1)
@@ -425,6 +450,7 @@ def run_all():
         test_backward_accumulates_parameter_gradients,
         test_sgd_zero_grad,
         test_module_discovers_nested_parameters,
+        test_module_names_nested_parameters,
         test_sgd_step_updates_parameters_only,
         test_single_training_step_reduces_loss,
     ]
