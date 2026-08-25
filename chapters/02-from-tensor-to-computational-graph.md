@@ -129,6 +129,7 @@ flowchart RL
 Il calcolo dei gradienti non avviene durante il forward. Dopo che il modello ha prodotto la prediction, una **loss** — una quantità scalare che misura il risultato rispetto all'obiettivo — prolunga il grafo a valle del modello. I gradienti vengono calcolati quando il programma invoca:
 
 ```python
+# Avvia Autograd dal Tensor scalare che rappresenta la loss.
 loss.backward()
 ```
 
@@ -205,7 +206,11 @@ In [`mytorch/tensor.py`](../mytorch/tensor.py), il costruttore materializza esat
 
 ```python
 class Tensor:
+    """Trasporta dati e stato necessario al calcolo differenziabile."""
+
     def __init__(self, data, requires_grad=False):
+        """Crea un Tensor foglia da dati numerici Python."""
+        # Lo stato del grafo è vuoto finché nessuna Operation produce il Tensor.
         self.data = data
         self.shape = _infer_shape(data)
         self.requires_grad = requires_grad
@@ -217,10 +222,14 @@ Gli operatori del `Tensor` non implementano direttamente l'algebra. Delegano all
 
 ```python
 def __mul__(self, other):
+    """Delega la moltiplicazione element-wise a Multiply."""
+    # Tensor espone l'operatore, ma il calcolo appartiene all'Operation.
     from .operations import Multiply
     return Multiply()(self, other)
 
 def __matmul__(self, other):
+    """Delega il prodotto tensoriale a MatMul."""
+    # La delega mantiene separati trasporto dei dati e algebra differenziabile.
     from .operations import MatMul
     return MatMul()(self, other)
 ```
@@ -232,11 +241,13 @@ Questo dettaglio rende visibile la separazione delle responsabilità: `Tensor` t
 ```python
 from mytorch import Tensor
 
+# Creiamo un Tensor foglia per osservarne lo stato iniziale.
 x = Tensor(
     [[1.0, 2.0], [3.0, 4.0]],
     requires_grad=True,
 )
 
+# Rendiamo visibili dati, shape e metadati differenziabili.
 print(x.data)
 print(x.shape)
 print(x.requires_grad)
@@ -286,12 +297,17 @@ Oltre al calcolo numerico, conserva ciò che servirà durante il backward. L'int
 
 ```python
 class Operation:
+    """Definisce il protocollo comune delle trasformazioni differenziabili."""
+
     def __call__(self, *inputs):
+        """Esegue il forward e collega l'output al grafo."""
+        # Gli input conservati serviranno alla regola locale di backward.
         self.inputs = inputs
         data = self.forward(*inputs)
 
         requires_grad = any(tensor.requires_grad for tensor in inputs)
 
+        # creator registra quale Operation ha prodotto il nuovo Tensor.
         result = Tensor(data, requires_grad=requires_grad)
         result.creator = self
         self.output = result
@@ -310,9 +326,13 @@ La chiamata svolge quattro operazioni architetturali:
 
 ```python
 def forward(self, *inputs):
+    """Calcola i dati di output a partire dai Tensor ricevuti."""
+    # Ogni Operation concreta deve fornire la propria trasformazione.
     raise NotImplementedError
 
 def backward(self, grad_output):
+    """Restituisce un gradiente locale per ciascun Tensor di input."""
+    # La regola concreta combina grad_output con la derivata locale.
     raise NotImplementedError
 ```
 
@@ -323,10 +343,14 @@ Il primo calcola valori; il secondo applica la regola differenziale locale.
 ```python
 from mytorch import Tensor
 
+# I due Tensor foglia richiedono entrambi il gradiente.
 a = Tensor([2.0, 3.0], requires_grad=True)
 b = Tensor([4.0, 5.0], requires_grad=True)
+
+# L'operatore costruisce ed esegue una Multiply Operation.
 z = a * b
 
+# Ispezioniamo sia il risultato sia i legami registrati nel grafo.
 print(z.data)
 print(z.shape)
 print(type(z.creator).__name__)
@@ -379,11 +403,15 @@ Di conseguenza, `Multiply.backward()` non restituisce semplicemente `b` e `a`. C
 
 ```python
 class Multiply(Operation):
+    """Implementa la moltiplicazione element-wise differenziabile."""
+
     def backward(self, grad_output):
+        """Propaga grad_output ai due operandi della moltiplicazione."""
         a, b = self.inputs
 
         output_shape = self.output.shape
 
+        # Combiniamo il gradiente da valle con le due derivate locali.
         grad_a_full = _broadcast_binary(
             grad_output, output_shape,
             b.data, b.shape,
@@ -395,6 +423,7 @@ class Multiply(Operation):
             lambda g, x: g * x,
         )
 
+        # Riduciamo gli assi eventualmente introdotti dal broadcasting.
         grad_a = _reduce_broadcast_gradient(
             grad_a_full, output_shape, a.shape
         )
@@ -432,10 +461,12 @@ Nel seguente esempio la variabile `loss` rappresenta dunque `L`:
 ```python
 from mytorch import Tensor
 
+# Costruiamo un grafo Multiply → Sum che termina in una loss scalare.
 a = Tensor([2.0, 3.0], requires_grad=True)
 b = Tensor([4.0, 5.0], requires_grad=True)
 loss = (a * b).sum()
 
+# Risaliamo dai collegamenti creator/inputs senza un oggetto Graph centrale.
 multiply = loss.creator.inputs[0].creator
 
 print(type(loss.creator).__name__)
@@ -585,6 +616,8 @@ Nel codice attuale il coordinamento è ricorsivo e risiede in `Tensor.backward()
 
 ```python
 def backward(self, grad=None):
+    """Accumula il gradiente e lo propaga ricorsivamente verso gli input."""
+    # I Tensor esclusi dalla differenziazione interrompono questo ramo.
     if not self.requires_grad:
         return
 
@@ -596,11 +629,13 @@ def backward(self, grad=None):
             )
         grad = 1.0
 
+    # Più percorsi del grafo possono contribuire allo stesso Tensor.
     self._accumulate_grad(grad)
 
     if self.creator is None:
         return
 
+    # La Operation creatrice applica la propria regola differenziale locale.
     input_grads = self.creator.backward(grad)
 
     for tensor, tensor_grad in zip(self.creator.inputs, input_grads):
