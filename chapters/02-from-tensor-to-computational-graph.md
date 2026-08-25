@@ -656,13 +656,16 @@ Un tensore può contribuire alla stessa loss attraverso più rami. Per esempio:
 ```python
 from mytorch import Tensor
 
+# x entra due volte nello stesso ramo Add del grafo.
 x = Tensor([2.0, 3.0], requires_grad=True)
 y = x + x
 loss = y.sum()
 
+# Prima del backward il valore esiste, ma x.grad è ancora vuoto.
 print(loss.data)
 print(x.grad)
 
+# Autograd parte dal seed scalare e accumula entrambi i contributi.
 loss.backward()
 
 print(loss.grad)
@@ -771,6 +774,7 @@ Non risponde alla domanda:
 Un input può richiedere il gradiente, per esempio per studiare la sensibilità della prediction rispetto ai dati, costruire metodi di interpretabilità o ottimizzare direttamente un input. Ciò non lo trasforma in un peso del modello.
 
 ```python
+# Questo input richiede sensibilità, ma non appartiene allo stato del modello.
 x = Tensor([2.0], requires_grad=True)
 ```
 
@@ -815,7 +819,11 @@ Essere una foglia non è però sufficiente a renderlo un parametro. Anche `x` e 
 
 ```python
 class Parameter(Tensor):
+    """Rappresenta un Tensor appartenente allo stato apprendibile."""
+
     def __init__(self, data):
+        """Crea un Tensor foglia che richiede sempre il gradiente."""
+        # La specializzazione è semantica: dati e Autograd restano quelli di Tensor.
         super().__init__(data, requires_grad=True)
 ```
 
@@ -824,14 +832,17 @@ class Parameter(Tensor):
 ```python
 from mytorch import Parameter, Tensor
 
+# weight è stato del modello; x è un normale input differenziabile.
 weight = Parameter([2.0, -1.0])
 x = Tensor([3.0, 4.0], requires_grad=True)
 loss = (weight * x).sum()
 
+# Prima del backward osserviamo tipo, flag e natura di foglia.
 print(isinstance(weight, Tensor))
 print(weight.requires_grad)
 print(weight.creator)
 
+# Entrambi ricevono gradienti perché entrambi hanno requires_grad=True.
 loss.backward()
 
 print(weight.grad)
@@ -942,15 +953,23 @@ In [`mytorch/module.py`](../mytorch/module.py), `__call__` rende un modulo invoc
 
 ```python
 class Module:
+    """Definisce il contratto base dei componenti di un modello."""
+
     def __call__(self, *inputs):
+        """Inoltra l'invocazione pubblica al forward concreto."""
+        # La classe base uniforma la chiamata di layer, blocchi e modelli.
         return self.forward(*inputs)
 
     def forward(self, *inputs):
+        """Definisce il calcolo nelle sottoclassi concrete."""
+        # Module non è utilizzabile finché una sottoclasse non implementa il forward.
         raise NotImplementedError
 
     def parameters(self):
+        """Restituisce ricorsivamente i Parameter posseduti dal componente."""
         params = []
 
+        # Gli attributi possono essere Parameter diretti o Module annidati.
         for value in self.__dict__.values():
             if isinstance(value, Parameter):
                 params.append(value)
@@ -968,17 +987,23 @@ class Module:
 from mytorch import Module, Parameter, Tensor
 
 class Scale(Module):
+    """Moltiplica l'input per un unico fattore apprendibile."""
+
     def __init__(self, value):
+        """Registra value come Parameter posseduto dal componente."""
         self.factor = Parameter(value)
 
     def forward(self, x):
+        """Applica il fattore tramite una Multiply Operation."""
         return x * self.factor
 
+# Rendiamo concreto il contratto Module e invochiamo il forward.
 scale = Scale(2.0)
 x = Tensor([1.5, -2.0, 3.0])
 output = scale(x)
 parameters = scale.parameters()
 
+# Osserviamo risultato, grafo e Parameter scoperto dal Module.
 print(output.data)
 print(type(output.creator).__name__)
 print(len(parameters))
@@ -1062,6 +1087,7 @@ y = W x + b
 I due argomenti del costruttore specificano il contratto tra lo spazio di ingresso e quello di uscita:
 
 ```python
+# Firma pubblica: il layer mappa in_features componenti in out_features.
 Linear(in_features, out_features)
 ```
 
@@ -1119,17 +1145,23 @@ La dimensione condivisa viene contratta dalla somma di `MatMul`; rimane la dimen
 
 ```python
 class Linear(Module):
+    """Applica una trasformazione affine a vettori o batch di vettori."""
+
     def __init__(self, in_features, out_features):
+        """Crea weight e bias con shape determinate dal contratto del layer."""
         self.in_features = in_features
         self.out_features = out_features
-        # ... inizializzazione dei valori ...
+        # ... inizializzazione editoriale omessa: il repository crea valori casuali ...
         self.weight = Parameter(weights)
         self.bias = Parameter(biases)
 
     def forward(self, x):
+        """Calcola Wx+b per un vettore o xW^T+b per un batch row-wise."""
+        # Il ramo vettoriale è quello sviluppato matematicamente nel capitolo.
         if x.shape == (self.in_features,):
             return self.weight @ x + self.bias
 
+        # Il codice corrente accetta anche una matrice di esempi organizzati per righe.
         if len(x.shape) == 2 and x.shape[1] == self.in_features:
             return x @ self.weight.T + self.bias
 
@@ -1157,6 +1189,7 @@ bias ──────────────┘
 ```python
 from mytorch import Linear, Tensor
 
+# Impostiamo valori deterministici per rendere verificabile il forward.
 layer = Linear(3, 2)
 layer.weight.data = [
     [0.5, 1.0, -2.0],
@@ -1164,12 +1197,14 @@ layer.weight.data = [
 ]
 layer.bias.data = [1.0, 2.0]
 
+# Il forward costruisce MatMul → Add e produce due componenti.
 x = Tensor([2.0, 4.0, 1.0])
 y = layer(x)
 
 print(y.data)
 print(y.shape)
 
+# La somma scalare permette di osservare i gradienti dei Parameter.
 y.sum().backward()
 
 print(layer.weight.grad)
@@ -1228,12 +1263,17 @@ Input → Linear → ReLU → Linear → Prediction
 
 ```python
 class TinyNet(Module):
+    """Compone due Linear e una ReLU in una piccola rete feed-forward."""
+
     def __init__(self):
+        """Registra i tre layer come sottomoduli del modello."""
         self.layer1 = Linear(1, 4)
         self.relu = ReLU()
         self.layer2 = Linear(4, 1)
 
     def forward(self, x):
+        """Trasforma un input unidimensionale in una prediction scalare."""
+        # Ogni chiamata a un sottomodulo estende il grafo del forward.
         x = self.layer1(x)
         x = self.relu(x)
         x = self.layer2(x)
