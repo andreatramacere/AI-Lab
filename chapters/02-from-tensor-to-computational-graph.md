@@ -1266,6 +1266,10 @@ Input → Linear → ReLU → Linear → Prediction
 [`mytorch/main.py`](../mytorch/main.py) contiene un modello concreto:
 
 ```python
+# Importiamo le astrazioni necessarie a definire la gerarchia del modello.
+from mytorch import Linear, Module, ReLU
+
+
 class TinyNet(Module):
     """Compone due Linear e una ReLU in una piccola rete feed-forward."""
 
