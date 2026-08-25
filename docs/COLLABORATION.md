@@ -311,9 +311,12 @@ Per esempio, descrivere `Tensor`, `Parameter`, `Module` o `Linear` mostrando sol
 ```python
 from mytorch import Tensor
 
+# Costruiamo una quantità scalare dipendente da x.
 x = Tensor([1.0, 2.0], requires_grad=True)
 scale = Tensor(3.0)
 y = (x * scale).sum()
+
+# Il backward rende osservabile il gradiente accumulato in x.
 y.backward()
 
 print(y.data)
@@ -339,5 +342,18 @@ Lo snippet d'uso deve rendere osservabile almeno uno degli aspetti pertinenti:
 L'output atteso deve essere riportato o spiegato immediatamente dopo lo snippet; il lettore non deve essere costretto a dedurlo. Gli esempi devono usare l'API reale nella sua forma corrente ed essere verificabili nel repository. Se un componente non può essere isolato sensatamente, lo snippet può mostrarlo nel più piccolo flusso end-to-end che ne renda visibile la responsabilità.
 
 Non è necessario ripetere uno snippet d'uso a ogni menzione dello stesso componente. È necessario inserirlo quando il componente viene introdotto o quando una sezione ne presenta un comportamento nuovo, per esempio il backward, il broadcasting o l'uso in batch.
+
+### Docstring e commenti negli snippet
+
+Ogni snippet Python deve guidare la lettura dall'interno del codice, senza affidare tutta l'interpretazione al testo circostante.
+
+- ogni classe, funzione o metodo definito nello snippet deve avere una docstring che ne dichiari responsabilità, input o risultato pertinenti all'esempio;
+- ogni snippet, inclusi i frammenti di una sola riga, deve contenere almeno un commento che chiarisca il ruolo del passaggio mostrato nel flusso complessivo;
+- negli esempi d'uso, i commenti devono distinguere preparazione degli oggetti, forward, costruzione della loss, backward e osservazione dello stato quando queste fasi sono presenti;
+- negli snippet d'implementazione, i commenti devono evidenziare le decisioni architetturali rilevanti, come registrazione del grafo, ownership dei Parameter o delega alle Operation;
+- docstring e commenti devono spiegare intenzione e responsabilità, non tradurre banalmente la sintassi Python riga per riga;
+- quando lo snippet riproduce codice del repository, docstring e commenti devono essere coerenti con l'implementazione reale. Eventuali omissioni editoriali devono essere indicate esplicitamente.
+
+Una docstring è richiesta quando lo snippet definisce un ente invocabile; non viene aggiunta artificialmente a un frammento che contiene soltanto chiamate o assegnazioni. In quel caso rimane obbligatorio il commento orientativo.
 
 La spiegazione rimane il contenuto principale; lo snippet di implementazione mostra come il concetto è costruito, mentre lo snippet d'uso verifica concretamente che cosa permette di fare.
