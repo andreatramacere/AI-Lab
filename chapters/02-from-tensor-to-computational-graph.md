@@ -843,7 +843,7 @@ Il `Parameter` mantiene la propria identità come oggetto posseduto dal modello 
 
 ---
 
-## 2.7 Module: composizione e ownership
+## 2.7 Module: contratto e ownership
 
 Con `Parameter` abbiamo distinto i tensori apprendibili dagli altri tensori, ma non abbiamo ancora stabilito **a quale componente appartengano** né come recuperarli quando il modello cresce.
 
@@ -866,66 +866,28 @@ Module
     e quale calcolo viene eseguito con esso
 ```
 
-Un modulo costituisce quindi un confine software attorno a stato e comportamento correlati. Può rappresentare un singolo layer, un blocco composto oppure l'intero modello. Poiché un `Module` può contenere altri `Module`, la stessa astrazione funziona a scale differenti:
-
-```text
-Model
-├── Block
-│   ├── Layer
-│   └── Layer
-└── Output Layer
-```
+Un modulo costituisce quindi un confine software attorno a stato e comportamento correlati. A questo punto osserviamo il caso più semplice: un componente che possiede direttamente un `Parameter` e definisce il calcolo che lo usa. La composizione di un `Module` dentro un altro verrà introdotta nella sezione 2.9, dopo avere costruito i primi layer concreti.
 
 ### Relazione tra Module e layer
 
-In MyTorch, **un layer viene implementato come una sottoclasse di `Module`**.
+`Module` è una classe base, non una trasformazione già utilizzabile. Il suo metodo `forward()` non conosce alcun calcolo e solleva `NotImplementedError`: chiamare direttamente un'istanza di `Module` non può quindi produrre un Tensor.
 
 ```text
 Module
-  astrazione software generale per componenti del modello
-        ↓ specializzazione
-Layer
-  Module che realizza una trasformazione della rappresentazione
+  definisce il contratto __call__() → forward()
+        ↓ richiede una sottoclasse
+Module concreto
+  implementa forward() e può possedere Parameter
 ```
 
-Per esempio:
-
-```python
-class Linear(Module):
-    ...
-
-class ReLU(Module):
-    ...
-```
-
-Entrambi sono layer perché ricevono un `Tensor` e producono un nuovo `Tensor` come parte del flusso del modello. Entrambi sono implementati mediante il contratto di `Module`, in particolare definendo `forward()`.
-
-La relazione, però, non è un'identità:
+Un layer di MyTorch sarà dunque un `Module` concreto che trasforma una rappresentazione. La relazione non è però un'identità:
 
 ```text
 ogni layer di MyTorch è un Module
 non ogni Module è necessariamente un singolo layer
 ```
 
-`TinyNet`, per esempio, è anch'essa una sottoclasse di `Module`, ma rappresenta l'intero modello e contiene più layer:
-
-```text
-TinyNet : Module
-├── layer1 : Linear, quindi Module
-├── relu   : ReLU, quindi Module
-└── layer2 : Linear, quindi Module
-```
-
-Questa uniformità è ciò che rende possibile la composizione: dal punto di vista del codice, un layer elementare, un blocco di layer e un modello completo espongono tutti la stessa interfaccia `forward()`.
-
-Questa gerarchia non coincide con il grafo computazionale. La gerarchia dei moduli descrive la struttura relativamente stabile del modello e l'ownership dei parametri; il grafo computazionale descrive invece le operazioni effettivamente eseguite durante uno specifico forward.
-
-```text
-GERARCHIA DEI MODULE             GRAFO COMPUTAZIONALE
-struttura del modello            storia di una computazione
-possesso dei Parameter           legami Tensor ↔ Operation
-esiste prima del forward         emerge durante il forward
-```
+La sezione 2.8 concretizzerà questo contratto con `Linear`. Solo dopo sarà possibile mostrare senza salti come più `Module` formino un modello.
 
 ### Architettura
 
@@ -934,11 +896,10 @@ Un `Module` organizza:
 ```text
 Module
 ├── Parameter posseduti direttamente
-├── Module annidati
 └── forward()
 ```
 
-Non introduce una nuova primitiva matematica. Introduce ownership, composizione e un'interfaccia uniforme per il forward.
+Non introduce una nuova primitiva matematica. Introduce ownership e un'interfaccia uniforme per il forward. La capacità di contenere altri `Module` appartiene allo stesso contratto, ma diventerà osservabile nella composizione ricorsiva della sezione 2.9.
 
 ### Implementazione
 
@@ -948,6 +909,9 @@ In [`mytorch/module.py`](../mytorch/module.py), `__call__` rende un modulo invoc
 class Module:
     def __call__(self, *inputs):
         return self.forward(*inputs)
+
+    def forward(self, *inputs):
+        raise NotImplementedError
 
     def parameters(self):
         params = []
@@ -961,43 +925,49 @@ class Module:
         return params
 ```
 
-### Esempio d'uso: composizione e scoperta ricorsiva
+`__call__()` stabilisce il percorso uniforme di invocazione, ma delega il calcolo a `forward()`. La classe base lascia intenzionalmente quest'ultimo indefinito. `parameters()` contiene già anche il ramo ricorsivo per i `Module` annidati; in questa sezione usiamo soltanto il caso diretto, mentre la ricorsione verrà osservata in 2.9.
+
+### Esempio d'uso: rendere concreto il contratto
 
 ```python
-from mytorch import Linear, Module, Tensor
+from mytorch import Module, Parameter, Tensor
 
-class TinyBlock(Module):
-    def __init__(self):
-        self.projection = Linear(2, 1)
+class Scale(Module):
+    def __init__(self, value):
+        self.factor = Parameter(value)
 
     def forward(self, x):
-        return self.projection(x)
+        return x * self.factor
 
-block = TinyBlock()
-block.projection.weight.data = [[2.0, -1.0]]
-block.projection.bias.data = [0.5]
-
-output = block(Tensor([3.0, 4.0]))
-parameters = block.parameters()
+scale = Scale(2.0)
+x = Tensor([1.5, -2.0, 3.0])
+output = scale(x)
+parameters = scale.parameters()
 
 print(output.data)
+print(type(output.creator).__name__)
 print(len(parameters))
-print(parameters[0] is block.projection.weight)
-print(parameters[1] is block.projection.bias)
+print(parameters[0] is scale.factor)
 ```
 
 Output:
 
 ```text
-[2.5]
-2
-True
+[3.0, -4.0, 6.0]
+Multiply
+1
 True
 ```
 
-La chiamata `block(...)` viene inoltrata a `TinyBlock.forward()`, che a sua volta invoca il sottomodulo `projection`. `block.parameters()` attraversa quella gerarchia e restituisce riferimenti ai due `Parameter` posseduti dal `Linear`, anche se non sono attributi diretti di `block`.
+`Scale` rende concreto il contratto astratto: possiede direttamente il `Parameter factor` e implementa `forward()` componendo una `Multiply Operation`. La chiamata `scale(x)` passa attraverso `Module.__call__()`, raggiunge `Scale.forward()` e produce un Tensor collegato al grafo. `parameters()` trova il `Parameter` posseduto direttamente dal componente.
 
-L'ottimizzatore può così ricevere `model.parameters()` senza conoscere nomi, numero o posizione dei singoli pesi.
+L'esempio non introduce ancora né un layer standard né una gerarchia di sottomoduli. Mostra soltanto il passaggio indispensabile:
+
+```text
+Module astratto
+    ↓ sottoclasse + forward concreto
+componente invocabile e differenziabile
+```
 
 Il meccanismo corrente scopre parametri e sottomoduli assegnati direttamente come attributi. Contenitori generici, liste di moduli, serializzazione e gestione dello stato non sono ancora implementati.
 
@@ -1011,7 +981,7 @@ Il passaggio può essere letto così:
 
 ```text
 Module
-  fornisce composizione, ownership e interfaccia
+  fornisce contratto, ownership e interfaccia
         ↓
 Linear : Module
   implementa un layer
@@ -1196,9 +1166,24 @@ Il `Module` in sé non è un tensore e quindi non possiede una singola `shape`. 
 
 ---
 
-## 2.9 Neural Network: gerarchia di Module
+## 2.9 Neural Network: composizione ricorsiva di Module
 
-Una rete neurale compare quando più moduli vengono composti per produrre una prediction:
+Ora conosciamo due `Module` concreti: `Linear`, introdotto nella sezione 2.8, e l'activation layer `ReLU`, anticipato nel diagramma iniziale e approfondito più avanti in questa sezione. Possiamo quindi affrontare la responsabilità lasciata in sospeso: comporre più `Module` senza perdere l'ownership dei loro `Parameter`.
+
+Un `Module` può possedere altri `Module` come attributi. La relazione è ricorsiva: un componente composto espone la stessa interfaccia `forward()` dei componenti che contiene e `parameters()` scende nella gerarchia fino ai Parameter foglia.
+
+```text
+Model : Module
+├── Layer : Module
+│   ├── Parameter
+│   └── Parameter
+├── Activation : Module
+└── Layer : Module
+    ├── Parameter
+    └── Parameter
+```
+
+Una rete neurale compare quando questi moduli vengono composti per produrre una prediction:
 
 ```text
 Input → Linear → ReLU → Linear → Prediction
@@ -1228,10 +1213,12 @@ from mytorch import Tensor
 model = TinyNet()
 x = Tensor([2.0])
 prediction = model(x)
+parameters = model.parameters()
 
 print(prediction.shape)
 print(type(prediction.creator).__name__)
-print(len(model.parameters()))
+print(len(parameters))
+print([parameter.shape for parameter in parameters])
 ```
 
 Output:
@@ -1240,9 +1227,30 @@ Output:
 (1,)
 Add
 4
+[(4, 1), (4,), (1, 4), (1,)]
 ```
 
-La chiamata attraversa i tre sottomoduli e restituisce una prediction con la shape richiesta dall'ultimo `Linear`. Il suo `creator` è l'`Add` finale del secondo layer; `model.parameters()` trova ricorsivamente weight e bias dei due `Linear`, mentre `ReLU` non aggiunge Parameter.
+La chiamata attraversa i tre sottomoduli e restituisce una prediction con la shape richiesta dall'ultimo `Linear`. Il suo `creator` è l'`Add` finale del secondo layer.
+
+La lista delle shape rende osservabile la discesa ricorsiva di `model.parameters()`:
+
+```text
+TinyNet.parameters()
+├── layer1.parameters() → weight (4, 1), bias (4,)
+├── relu.parameters()   → nessun Parameter
+└── layer2.parameters() → weight (1, 4), bias (1,)
+```
+
+L'optimizer può quindi ricevere `model.parameters()` senza conoscere nomi, numero o posizione dei singoli pesi.
+
+Questa gerarchia non coincide con il grafo computazionale. La gerarchia dei moduli descrive la struttura relativamente stabile del modello e l'ownership dei parametri; il grafo computazionale descrive invece le operazioni effettivamente eseguite durante uno specifico forward.
+
+```text
+GERARCHIA DEI MODULE             GRAFO COMPUTAZIONALE
+struttura del modello            storia di una computazione
+possesso dei Parameter           legami Tensor ↔ Operation
+esiste prima del forward         emerge durante il forward
+```
 
 ### Perché i due `Linear` hanno shape differenti
 
