@@ -1186,6 +1186,8 @@ bias ──────────────┘
 
 ### Esempio d'uso: forward e gradienti di un Linear
 
+Per collocare l'esempio dentro una rete, interpretiamo `x` come la rappresentazione ricevuta da questo `Linear`. Se il layer è interno al modello, `x` è la **hidden representation** prodotta dal layer precedente per lo specifico input e per i valori correnti dei Parameter. Non la chiamiamo *hidden state*: questo termine indica normalmente lo stato trasmesso tra passi temporali in un'architettura ricorrente. La distinzione non è universale rispetto a ogni `Linear`: il primo layer può ricevere direttamente l'input del modello, mentre un output head può ricevere l'ultima hidden representation.
+
 ```python
 from mytorch import Linear, Tensor
 
@@ -1197,8 +1199,10 @@ layer.weight.data = [
 ]
 layer.bias.data = [1.0, 2.0]
 
-# Il forward costruisce MatMul → Add e produce due componenti.
+# Interpretiamo x come hidden representation prodotta dal layer precedente.
 x = Tensor([2.0, 4.0, 1.0])
+
+# Il Linear costruisce MatMul → Add e produce la rappresentazione successiva.
 y = layer(x)
 
 print(y.data)
@@ -1220,7 +1224,7 @@ Output:
 [1.0, 1.0]
 ```
 
-Il forward applica `Wx + b` e produce due componenti. Il backward della somma raggiunge `weight` e `bias` attraverso `Add` e `MatMul`: il layer espone i gradienti nei propri `Parameter` pur non implementando un `Linear.backward()`.
+In questa lettura, `x` è una hidden representation con tre componenti e `y` è il Tensor a due componenti prodotto dal layer. Se una funzione di attivazione segue il `Linear`, `y` ne costituisce la pre-attivazione. Il backward della somma raggiunge `weight` e `bias` attraverso `Add` e `MatMul`: il layer espone i gradienti nei propri `Parameter` pur non implementando un `Linear.backward()`.
 
 ### Le tre shape da non confondere
 
@@ -1285,11 +1289,13 @@ class TinyNet(Module):
 ```python
 from mytorch import Tensor
 
+# Il modello possiede già la gerarchia; il forward crea il grafo dinamico.
 model = TinyNet()
 x = Tensor([2.0])
 prediction = model(x)
 parameters = model.parameters()
 
+# Confrontiamo output dell'esecuzione e stato persistente scoperto ricorsivamente.
 print(prediction.shape)
 print(type(prediction.creator).__name__)
 print(len(parameters))
@@ -1384,6 +1390,7 @@ in_features del layer successivo
 Se scrivessimo invece:
 
 ```python
+# Errore di composizione: layer2 richiede 3 componenti, ma layer1 ne produce 4.
 self.layer1 = Linear(1, 4)
 self.layer2 = Linear(3, 1)
 ```
@@ -1458,7 +1465,11 @@ Il forward reale in [`mytorch/operations.py`](../mytorch/operations.py) applica 
 
 ```python
 class ReLU(Operation):
+    """Applica la Rectified Linear Unit elemento per elemento."""
+
     def forward(self, x):
+        """Azzera i valori negativi senza modificare la shape."""
+        # _map_unary applica la soglia a ogni scalare annidato nel Tensor.
         return _map_unary(
             x.data,
             lambda value: max(0.0, value),
@@ -1475,11 +1486,13 @@ d ReLU / dx = 0    per x ≤ 0 nella convenzione di MyTorch
 Quindi il gradiente passa nelle componenti positive e viene bloccato nelle altre:
 
 ```python
+# La maschera codifica la derivata locale scelta da MyTorch.
 mask = _map_unary(
     x.data,
     lambda value: 1.0 if value > 0 else 0.0,
 )
 
+# grad_output passa soltanto nelle posizioni attive del forward.
 grad_x = _map_binary(
     grad_output,
     mask,
@@ -1501,14 +1514,17 @@ backward    filtra i gradienti nelle stesse posizioni
 ```python
 from mytorch import ReLU, Tensor
 
+# Il layer non ha Parameter, ma costruisce comunque una Operation differenziabile.
 activation = ReLU()
 x = Tensor([-2.0, 0.0, 3.0, 5.0], requires_grad=True)
 h = activation(x)
 
+# Il forward rende osservabili soglia, shape invariata e assenza di stato.
 print(h.data)
 print(h.shape)
 print(len(activation.parameters()))
 
+# La riduzione scalare permette di osservare la maschera nel backward.
 h.sum().backward()
 
 print(x.grad)
@@ -1564,6 +1580,7 @@ from copy import deepcopy
 
 from mytorch import MSELoss, SGD, Tensor
 
+# Prepariamo modello, criterio e optimizer come sottosistemi separati.
 model = TinyNet()
 loss_fn = MSELoss()
 optimizer = SGD(model.parameters(), lr=0.01)
@@ -1571,10 +1588,12 @@ optimizer = SGD(model.parameters(), lr=0.01)
 x = Tensor([2.0])
 target = Tensor([4.0])
 
+# Una iterazione esegue forward, loss, backward e aggiornamento in quest'ordine.
 optimizer.zero_grad()
 prediction = model(x)
 loss = loss_fn(prediction, target)
 
+# Conserviamo lo stato precedente per verificare la mutazione dell'optimizer.
 before_step = [deepcopy(p.data) for p in model.parameters()]
 loss.backward()
 
@@ -1582,6 +1601,7 @@ print(prediction.shape)
 print(loss.shape)
 print(all(p.grad is not None for p in model.parameters()))
 
+# step usa i gradienti già calcolati; non percorre il grafo.
 optimizer.step()
 
 after_step = [p.data for p in model.parameters()]
@@ -1652,6 +1672,7 @@ Questa chiamata stabilisce il confine tra due raccolte di contributi al gradient
 La chiamata
 
 ```python
+# Il modello legge input e Parameter e costruisce il grafo fino alla prediction.
 prediction = model(x)
 ```
 
@@ -1696,15 +1717,19 @@ Quindi “il modello termina alla prediction” descrive un **confine di respons
 La chiamata
 
 ```python
+# La loss prolunga il grafo collegando prediction e target.
 loss = loss_fn(prediction, target)
 ```
 
 non assegna semplicemente un numero alla prediction. Costruisce nuove operazioni differenziabili a valle del modello. La `MSELoss` di MyTorch è composta da primitive già presenti nel core:
 
 ```python
+# MSELoss compone primitive già differenziabili del core.
 error = prediction - target
 squared_error = error ** 2
 total = squared_error.sum()
+
+# scale trasforma la somma nella media degli errori quadratici.
 return total * scale
 ```
 
@@ -1737,6 +1762,7 @@ La loss è scalare. Questo fornisce una singola quantità rispetto alla quale es
 La chiamata
 
 ```python
+# Autograd parte dalla loss scalare e accumula i gradienti nei Parameter.
 loss.backward()
 ```
 
@@ -1776,6 +1802,7 @@ Questo punto è essenziale: **il backward non addestra ancora il modello** nel s
 La chiamata
 
 ```python
+# SGD legge Parameter.data e Parameter.grad per applicare l'aggiornamento.
 optimizer.step()
 ```
 
@@ -1812,6 +1839,7 @@ vecchi parametri → vecchia prediction → loss → gradienti
 Per osservare l'effetto dell'aggiornamento bisogna eseguire nuovamente:
 
 ```python
+# Un nuovo forward usa i valori aggiornati e costruisce un nuovo grafo.
 new_prediction = model(x)
 ```
 
