@@ -75,6 +75,7 @@ Ogni informazione deve essere inserita nella sua sede naturale:
 - docs/MAP.md → struttura architetturale del laboratorio.
 - docs/GLOSSARY.md → definizioni consolidate.
 - chapters/ → materiale didattico consolidato.
+- chapters_en/ → traduzione inglese dei capitoli italiani consolidati.
 - notes/ → idee, dubbi e approfondimenti non ancora consolidati.
 - mytorch/ → codice del framework.
 
@@ -91,6 +92,35 @@ Fanno eccezione solo:
 - i nomi delle classi, delle funzioni e delle API;
 
 - i termini inglesi ormai standard quando la traduzione sarebbe fuorviante.
+
+## Regola — Edizione inglese dei capitoli
+
+La directory `chapters/` contiene l'edizione italiana ed è la fonte editoriale primaria. La directory `chapters_en/` contiene l'edizione inglese derivata e ne rispecchia struttura, numerazione e nomi dei file.
+
+La traduzione viene prodotta esclusivamente su richiesta esplicita dell'utente, formulata per esempio come “produci il capitolo X in inglese”. Il raggiungimento di un checkpoint o il consolidamento di fine sessione non autorizzano automaticamente la creazione o l'aggiornamento della versione inglese.
+
+Quando viene richiesta, il flusso editoriale è:
+
+```text
+revisione in italiano
+  → checkpoint del capitolo consolidato
+  → aggiornamento della corrispondente versione inglese
+  → verifica di equivalenza tecnica ed editoriale
+```
+
+La traduzione deve partire dall'ultimo checkpoint consolidato del capitolo italiano indicato dall'utente. Se il capitolo italiano viene riaperto successivamente, la versione inglese rimane invariata finché l'utente non ne richiede esplicitamente il riallineamento.
+
+Devono essere preservati tra le due edizioni:
+
+- gerarchia e numerazione delle sezioni;
+- diagrammi, formule, snippet, docstring, commenti e output attesi;
+- significato tecnico e livello di astrazione;
+- collegamenti tra MAP, glossario, codice e capitoli;
+- terminologia standard, mantenendo una corrispondenza stabile tra termini italiani e inglesi.
+
+La versione inglese non deve introdurre contenuti tecnici, esempi o decisioni editoriali assenti dalla fonte italiana. Se la traduzione rivela un'ambiguità, si corregge prima `chapters/` e poi si rigenera il passaggio corrispondente in `chapters_en/`.
+
+Un capitolo inglese è considerato aggiornato solo rispetto al checkpoint della fonte italiana usato nell'ultima traduzione richiesta. La presenza di una versione inglese non implica quindi che essa segua automaticamente revisioni italiane successive.
 
 ## Regola — Zoom Out / Deep Dive / Zoom Out
 
