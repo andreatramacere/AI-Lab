@@ -16,7 +16,7 @@ The mechanism that traverses the computational graph backwards and composes loca
 A Tensor with learnable semantics: it identifies a value that belongs to the trainable state of a model and should be exposed to an optimizer.
 
 ## Module
-A reusable neural-network component that organizes Parameters, optional submodules, and a forward computation.
+A reusable neural-network component that organizes Parameters, optional submodules, and a forward computation. `named_parameters()` exposes learnable state through hierarchical ownership paths such as `layer1.weight`, while `parameters()` exposes the same Parameter objects without names for optimizers.
 
 ## Linear
 A Module that applies an affine transformation, typically expressed as `y = Wx + b`, by composing primitive tensor Operations with learnable Parameters.

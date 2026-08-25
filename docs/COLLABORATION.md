@@ -280,6 +280,41 @@ Una semplice menzione in un diagramma non costituisce un'introduzione. Se il ter
 
 Sono esclusi i concetti generali già appartenenti al background dichiarato del lettore, come vettore, matrice, funzione, derivata, lista, dizionario e classe Python, salvo che assumano nel framework un significato tecnico diverso o più specifico.
 
+## Regola — Chiusura dei prerequisiti prima della composizione
+
+Uno snippet composito può usare soltanto enti che il lettore ha già incontrato con il livello di profondità necessario a comprenderne il ruolo nello snippet. Non è sufficiente che una classe o un'operazione sia stata nominata in precedenza o compaia in un diagramma.
+
+Prima che un ente venga usato come ingrediente di un modello, blocco o flusso end-to-end, devono essere già chiariti, quando pertinenti:
+
+```text
+RESPONSABILITÀ
+  quale trasformazione o servizio fornisce
+
+STATO
+  quali Parameter possiede, oppure perché non ne possiede
+
+FORWARD
+  quali input riceve, quali output produce e come gestisce le shape
+
+BACKWARD
+  come il gradiente attraversa il componente
+
+IMPLEMENTAZIONE
+  quali primitive inferiori compone nel codice reale
+```
+
+La sequenza editoriale è quindi:
+
+```text
+enti elementari compresi separatamente
+  → composizione degli enti
+  → comportamento emergente del blocco o del modello
+```
+
+Un'anticipazione nella big picture è ammessa per orientare il lettore, ma non autorizza a usare l'ente in uno snippet composito prima del suo deep dive minimo. Se il dettaglio completo appartiene a un capitolo successivo, lo snippet corrente deve limitarsi a un'interfaccia già spiegata e dichiarare esplicitamente quale parte rimane una black box temporanea.
+
+“Conoscere la natura interna” non significa riprodurre preventivamente ogni dettaglio di un framework di produzione. Significa rendere visibile il nucleo architetturale necessario a capire perché l'API ha quel comportamento, quali responsabilità nasconde e su quali primitive è costruita.
+
 ## Regola — Coerenza locale e continuità della notazione
 
 Ogni sezione deve collegarsi esplicitamente a ciò che la precede. Il lettore non deve dedurre da solo se un simbolo, un nome nel codice e un nodo di un diagramma rappresentino lo stesso ente.

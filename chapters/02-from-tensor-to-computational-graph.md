@@ -912,7 +912,7 @@ Module
     e quale calcolo viene eseguito con esso
 ```
 
-Un modulo costituisce quindi un confine software attorno a stato e comportamento correlati. A questo punto osserviamo il caso più semplice: un componente che possiede direttamente un `Parameter` e definisce il calcolo che lo usa. La composizione di un `Module` dentro un altro verrà introdotta nella sezione 2.9, dopo avere costruito i primi layer concreti.
+Un modulo costituisce quindi un confine software attorno a stato e comportamento correlati. A questo punto osserviamo il caso più semplice: un componente che possiede direttamente un `Parameter` e definisce il calcolo che lo usa. La composizione di un `Module` dentro un altro verrà introdotta nella sezione 2.10, dopo avere costruito i primi layer concreti.
 
 ### Relazione tra Module e layer
 
@@ -945,11 +945,11 @@ Module
 └── forward()
 ```
 
-Non introduce una nuova primitiva matematica. Introduce ownership e un'interfaccia uniforme per il forward. La capacità di contenere altri `Module` appartiene allo stesso contratto, ma diventerà osservabile nella composizione ricorsiva della sezione 2.9.
+Non introduce una nuova primitiva matematica. Introduce ownership e un'interfaccia uniforme per il forward. La capacità di contenere altri `Module` appartiene allo stesso contratto, ma diventerà osservabile nella composizione ricorsiva della sezione 2.10.
 
 ### Implementazione
 
-In [`mytorch/module.py`](../mytorch/module.py), `__call__` rende un modulo invocabile e `parameters()` attraversa ricorsivamente la gerarchia:
+In [`mytorch/module.py`](../mytorch/module.py), `__call__` rende un modulo invocabile, `named_parameters()` attraversa ricorsivamente la gerarchia conservando i percorsi di ownership e `parameters()` espone gli stessi oggetti senza i nomi:
 
 ```python
 class Module:
@@ -965,21 +965,41 @@ class Module:
         # Module non è utilizzabile finché una sottoclasse non implementa il forward.
         raise NotImplementedError
 
-    def parameters(self):
-        """Restituisce ricorsivamente i Parameter posseduti dal componente."""
-        params = []
+    def named_parameters(self, prefix=""):
+        """Restituisce coppie (percorso, Parameter) dalla gerarchia."""
+        named_params = []
 
-        # Gli attributi possono essere Parameter diretti o Module annidati.
-        for value in self.__dict__.values():
+        # Il percorso deriva dai nomi degli attributi attraversati.
+        for name, value in self.__dict__.items():
+            path = f"{prefix}.{name}" if prefix else name
+
             if isinstance(value, Parameter):
-                params.append(value)
+                named_params.append((path, value))
             elif isinstance(value, Module):
-                params.extend(value.parameters())
+                named_params.extend(value.named_parameters(path))
 
-        return params
+        return named_params
+
+    def parameters(self):
+        """Restituisce i Parameter richiesti dall'optimizer."""
+        # L'optimizer non ha bisogno dei percorsi di ownership.
+        return [
+            parameter
+            for _, parameter in self.named_parameters()
+        ]
 ```
 
-`__call__()` stabilisce il percorso uniforme di invocazione, ma delega il calcolo a `forward()`. La classe base lascia intenzionalmente quest'ultimo indefinito. `parameters()` contiene già anche il ramo ricorsivo per i `Module` annidati; in questa sezione usiamo soltanto il caso diretto, mentre la ricorsione verrà osservata in 2.9.
+`__call__()` stabilisce il percorso uniforme di invocazione, ma delega il calcolo a `forward()`. La classe base lascia intenzionalmente quest'ultimo indefinito. `named_parameters()` contiene già il ramo ricorsivo per i `Module` annidati; in questa sezione usiamo soltanto il caso diretto, mentre la ricorsione verrà osservata in 2.10.
+
+Il nome di un Parameter non viene memorizzato dentro il Parameter stesso. Deriva dal percorso con cui il `Module` lo possiede:
+
+```text
+attributo diretto       factor
+attributo annidato      layer1.weight
+                        layer1.bias
+```
+
+In questo modo `weight` e `bias` rimangono normali `Parameter`: è il nome dell'attributo a descriverne il ruolo. `parameters()` proietta poi le coppie nominate sui soli valori, preservando l'interfaccia semplice usata dall'optimizer.
 
 ### Esempio d'uso: rendere concreto il contratto
 
@@ -1002,12 +1022,15 @@ scale = Scale(2.0)
 x = Tensor([1.5, -2.0, 3.0])
 output = scale(x)
 parameters = scale.parameters()
+named_parameters = scale.named_parameters()
 
 # Osserviamo risultato, grafo e Parameter scoperto dal Module.
 print(output.data)
 print(type(output.creator).__name__)
 print(len(parameters))
 print(parameters[0] is scale.factor)
+print(named_parameters[0][0])
+print(named_parameters[0][1] is scale.factor)
 ```
 
 Output:
@@ -1017,9 +1040,11 @@ Output:
 Multiply
 1
 True
+factor
+True
 ```
 
-`Scale` rende concreto il contratto astratto: possiede direttamente il `Parameter factor` e implementa `forward()` componendo una `Multiply Operation`. La chiamata `scale(x)` passa attraverso `Module.__call__()`, raggiunge `Scale.forward()` e produce un Tensor collegato al grafo. `parameters()` trova il `Parameter` posseduto direttamente dal componente.
+`Scale` rende concreto il contratto astratto: possiede direttamente il `Parameter factor` e implementa `forward()` componendo una `Multiply Operation`. La chiamata `scale(x)` passa attraverso `Module.__call__()`, raggiunge `Scale.forward()` e produce un Tensor collegato al grafo. `named_parameters()` restituisce `("factor", scale.factor)`, mentre `parameters()` restituisce direttamente lo stesso oggetto `scale.factor`.
 
 L'esempio non introduce ancora né un layer standard né una gerarchia di sottomoduli. Mostra soltanto il passaggio indispensabile:
 
@@ -1240,9 +1265,164 @@ Il `Module` in sé non è un tensore e quindi non possiede una singola `shape`. 
 
 ---
 
-## 2.9 Neural Network: composizione ricorsiva di Module
+## 2.9 ReLU: activation layer senza Parameter
 
-Ora conosciamo due `Module` concreti: `Linear`, introdotto nella sezione 2.8, e l'activation layer `ReLU`, anticipato nel diagramma iniziale e approfondito più avanti in questa sezione. Possiamo quindi affrontare la responsabilità lasciata in sospeso: comporre più `Module` senza perdere l'ownership dei loro `Parameter`.
+`Linear` ha introdotto una trasformazione affine parametrica. Prima di comporre due `Linear` in una rete dobbiamo comprendere il componente collocato tra loro: `ReLU`, acronimo di **Rectified Linear Unit**, è una funzione di attivazione che introduce non linearità applicando elemento per elemento
+
+```text
+ReLU(x) = max(0, x)
+```
+
+Intuitivamente agisce come una soglia:
+
+```text
+x < 0    → 0
+x = 0    → 0
+x > 0    → x
+```
+
+Non modifica la shape e non apprende coefficienti. Il suo ruolo è trasformare la pre-attivazione `z` prodotta da un layer parametrico nella hidden representation `h` passata al componente successivo:
+
+```text
+Linear
+  ↓ pre-activation z
+ReLU activation layer
+  ↓ hidden representation h
+```
+
+Senza una funzione non lineare, la composizione di due trasformazioni affini rimarrebbe una singola trasformazione affine:
+
+```text
+W₂(W₁x + b₁) + b₂
+= (W₂W₁)x + (W₂b₁ + b₂)
+```
+
+### Dal layer alla Operation
+
+In MyTorch il nome `ReLU` compare a due livelli distinti. [`mytorch/layers.py`](../mytorch/layers.py) espone l'activation layer usato nella gerarchia del modello:
+
+```python
+class ReLU(Module):
+    """Avvolge la ReLU Operation in un layer invocabile."""
+
+    def forward(self, x):
+        """Applica ReLU elemento per elemento al Tensor ricevuto."""
+        # Tensor.relu() crea ed esegue la Operation differenziabile.
+        return x.relu()
+```
+
+Il layer non definisce `__init__` e non assegna alcun `Parameter` ai propri attributi. Di conseguenza, l'istanza non possiede stato apprendibile e `Module.named_parameters()` non trova nulla:
+
+```text
+ReLU activation layer
+├── Parameter diretti       nessuno
+├── Module annidati         nessuno
+└── forward(x)              x.relu()
+```
+
+La delega prosegue in [`mytorch/tensor.py`](../mytorch/tensor.py):
+
+```python
+def relu(self):
+    """Applica ReLU elemento per elemento al Tensor."""
+    # Il metodo del Tensor istanzia la Operation omonima del core.
+    from .operations import ReLU
+    return ReLU()(self)
+```
+
+La catena implementativa completa è quindi:
+
+```text
+ReLU Module.__call__
+  → ReLU Module.forward
+  → Tensor.relu
+  → ReLU Operation.__call__
+  → ReLU Operation.forward
+  → Tensor di output collegato al grafo
+```
+
+Il fatto che il layer non abbia Parameter non significa che sia esterno al modello o ad Autograd. Il layer appartiene alla gerarchia stabile del modello che lo contiene; la `ReLU Operation` creata dal suo forward appartiene invece al grafo della specifica esecuzione.
+
+### Forward e backward della Operation
+
+Nel core, [`mytorch/operations.py`](../mytorch/operations.py) implementa il calcolo numerico e la regola differenziale locale:
+
+```python
+class ReLU(Operation):
+    """Applica la Rectified Linear Unit elemento per elemento."""
+
+    def forward(self, x):
+        """Azzera i valori negativi senza modificare la shape."""
+        # _map_unary applica la soglia a ogni scalare del Tensor.
+        return _map_unary(
+            x.data,
+            lambda value: max(0.0, value),
+        )
+
+    def backward(self, grad_output):
+        """Lascia passare il gradiente solo dove l'input era positivo."""
+        x, = self.inputs
+
+        # La maschera codifica la derivata locale scelta da MyTorch.
+        mask = _map_unary(
+            x.data,
+            lambda value: 1.0 if value > 0 else 0.0,
+        )
+
+        grad_x = _map_binary(
+            grad_output,
+            mask,
+            lambda g, active: g * active,
+        )
+
+        return (grad_x,)
+```
+
+La derivata locale usata nel backward è:
+
+```text
+d ReLU / dx = 1    per x > 0
+d ReLU / dx = 0    per x ≤ 0 nella convenzione di MyTorch
+```
+
+Nel punto `x = 0` la funzione non è derivabile in senso classico. MyTorch assegna derivata `0`: è una scelta implementativa esplicita. Il backward riceve `grad_output` da valle, lo moltiplica per questa maschera e restituisce `grad_x` ad Autograd.
+
+### Esempio d'uso: assenza di Parameter e backward a maschera
+
+```python
+from mytorch import ReLU, Tensor
+
+# Il layer non possiede Parameter, ma crea una Operation differenziabile.
+activation = ReLU()
+x = Tensor([-2.0, 0.0, 3.0, 5.0], requires_grad=True)
+h = activation(x)
+
+# Osserviamo soglia, shape invariata e stato apprendibile vuoto.
+print(h.data)
+print(h.shape)
+print(activation.named_parameters())
+
+# La riduzione scalare rende visibile la maschera nel backward.
+h.sum().backward()
+print(x.grad)
+```
+
+Output:
+
+```text
+[0.0, 0.0, 3.0, 5.0]
+(4,)
+[]
+[0.0, 0.0, 1.0, 1.0]
+```
+
+Ora `ReLU()` non è più una black box: conosciamo la sua posizione nella rete, il wrapper `Module`, la `Operation` sottostante, l'assenza di stato apprendibile e il comportamento del gradiente. Possiamo quindi usarla nella composizione di `TinyNet`.
+
+---
+
+## 2.10 Neural Network: composizione ricorsiva di Module
+
+Ora conosciamo separatamente i due `Module` concreti che comporremo: il layer parametrico `Linear`, introdotto nella sezione 2.8, e l'activation layer `ReLU`, introdotto nella sezione 2.9. Possiamo quindi affrontare la responsabilità lasciata in sospeso: comporre più `Module` senza perdere l'ownership dei loro `Parameter`.
 
 Un `Module` può possedere altri `Module` come attributi. La relazione è ricorsiva: un componente composto espone la stessa interfaccia `forward()` dei componenti che contiene e `parameters()` scende nella gerarchia fino ai Parameter foglia.
 
@@ -1298,12 +1478,17 @@ model = TinyNet()
 x = Tensor([2.0])
 prediction = model(x)
 parameters = model.parameters()
+named_parameters = model.named_parameters()
 
 # Confrontiamo output dell'esecuzione e stato persistente scoperto ricorsivamente.
 print(prediction.shape)
 print(type(prediction.creator).__name__)
 print(len(parameters))
 print([parameter.shape for parameter in parameters])
+
+# I percorsi nominano il ruolo di ogni Parameter nella gerarchia.
+for name, parameter in named_parameters:
+    print(name, parameter.shape)
 ```
 
 Output:
@@ -1313,20 +1498,29 @@ Output:
 Add
 4
 [(4, 1), (4,), (1, 4), (1,)]
+layer1.weight (4, 1)
+layer1.bias (4,)
+layer2.weight (1, 4)
+layer2.bias (1,)
 ```
 
 La chiamata attraversa i tre sottomoduli e restituisce una prediction con la shape richiesta dall'ultimo `Linear`. Il suo `creator` è l'`Add` finale del secondo layer.
 
-La lista delle shape rende osservabile la discesa ricorsiva di `model.parameters()`:
+Le liste rendono osservabile la discesa ricorsiva e la relazione tra le due API:
 
 ```text
+TinyNet.named_parameters()
+├── layer1.weight → Parameter (4, 1)
+├── layer1.bias   → Parameter (4,)
+├── relu          → nessun Parameter
+├── layer2.weight → Parameter (1, 4)
+└── layer2.bias   → Parameter (1,)
+
 TinyNet.parameters()
-├── layer1.parameters() → weight (4, 1), bias (4,)
-├── relu.parameters()   → nessun Parameter
-└── layer2.parameters() → weight (1, 4), bias (1,)
+└── gli stessi quattro oggetti Parameter, senza i percorsi
 ```
 
-L'optimizer può quindi ricevere `model.parameters()` senza conoscere nomi, numero o posizione dei singoli pesi.
+L'optimizer può continuare a ricevere `model.parameters()` senza conoscere nomi, numero o posizione dei singoli pesi. Strumenti di ispezione, logging o futura serializzazione possono invece usare `model.named_parameters()` per mantenere il collegamento tra ogni valore e la sua posizione nella gerarchia.
 
 Questa gerarchia non coincide con il grafo computazionale. La gerarchia dei moduli descrive la struttura relativamente stabile del modello e l'ownership dei parametri; il grafo computazionale descrive invece le operazioni effettivamente eseguite durante uno specifico forward.
 
@@ -1401,150 +1595,6 @@ self.layer2 = Linear(3, 1)
 
 il primo produrrebbe `(4,)`, mentre il secondo richiederebbe `(3,)`. Il controllo in `Linear.forward()` solleverebbe quindi un `ValueError`: non esiste una connessione dimensionale valida.
 
-### Il ruolo di ReLU tra i due layer
-
-`ReLU` significa **Rectified Linear Unit**, in italiano unità lineare rettificata. È una funzione di attivazione applicata indipendentemente a ogni elemento:
-
-```text
-ReLU(x) = max(0, x)
-```
-
-Intuitivamente agisce come una soglia:
-
-```text
-x < 0    → 0
-x = 0    → 0
-x > 0    → x
-```
-
-Per esempio:
-
-```text
-ReLU([-2, 0, 3, 5]) = [0, 0, 3, 5]
-```
-
-Si chiama “rettificata” perché elimina la parte negativa della funzione identità, lasciando invariata quella positiva. Non possiede `Parameter`: è un layer perché trasforma una rappresentazione, ma non contiene stato apprendibile.
-
-### Dove si colloca nella rete
-
-`ReLU` viene posta tra due layer affini:
-
-```text
-Linear → ReLU → Linear
-```
-
-Il primo `Linear` costruisce una rappresentazione intermedia. `ReLU` decide elemento per elemento quali componenti positive lasciare passare e quali componenti non positive annullare. Il secondo `Linear` combina la rappresentazione risultante.
-
-`ReLU` non modifica la shape:
-
-```text
-(4,) → ReLU → (4,)
-```
-
-Modifica soltanto i valori, introducendo una non linearità. Il flusso completo delle shape è:
-
-```text
-input       Linear(1,4)       ReLU       Linear(4,1)    prediction
- (1,)  ─────────────────→     (4,)  ─────────────────→    (1,)
-```
-
-Più precisamente:
-
-```text
-(1,) → Linear(1,4) → (4,) → ReLU → (4,) → Linear(4,1) → (1,)
-```
-
-Senza ReLU, la composizione di due trasformazioni affini sarebbe ancora una singola trasformazione affine:
-
-```text
-W₂(W₁x + b₁) + b₂
-= (W₂W₁)x + (W₂b₁ + b₂)
-```
-
-La rappresentazione intermedia a quattro componenti acquista capacità espressiva non lineare proprio perché `ReLU` viene applicata prima del secondo layer.
-
-### Forward e backward
-
-Il forward reale in [`mytorch/operations.py`](../mytorch/operations.py) applica la soglia elemento per elemento:
-
-```python
-class ReLU(Operation):
-    """Applica la Rectified Linear Unit elemento per elemento."""
-
-    def forward(self, x):
-        """Azzera i valori negativi senza modificare la shape."""
-        # _map_unary applica la soglia a ogni scalare annidato nel Tensor.
-        return _map_unary(
-            x.data,
-            lambda value: max(0.0, value),
-        )
-```
-
-Nel backward, la derivata locale è:
-
-```text
-d ReLU / dx = 1    per x > 0
-d ReLU / dx = 0    per x ≤ 0 nella convenzione di MyTorch
-```
-
-Quindi il gradiente passa nelle componenti positive e viene bloccato nelle altre:
-
-```python
-# La maschera codifica la derivata locale scelta da MyTorch.
-mask = _map_unary(
-    x.data,
-    lambda value: 1.0 if value > 0 else 0.0,
-)
-
-# grad_output passa soltanto nelle posizioni attive del forward.
-grad_x = _map_binary(
-    grad_output,
-    mask,
-    lambda g, active: g * active,
-)
-```
-
-Nel punto `x = 0` la funzione non è derivabile in senso classico. MyTorch, come scelta implementativa, assegna derivata `0`. Questa convenzione è sufficiente per il comportamento di Autograd e deve essere distinta dalla definizione matematica fuori dal punto angoloso.
-
-`ReLU` rende dunque possibile una rete non lineare con un meccanismo locale molto semplice:
-
-```text
-forward     filtra i valori non positivi
-backward    filtra i gradienti nelle stesse posizioni
-```
-
-### Esempio d'uso: valori nel forward e maschera nel backward
-
-```python
-from mytorch import ReLU, Tensor
-
-# Il layer non ha Parameter, ma costruisce comunque una Operation differenziabile.
-activation = ReLU()
-x = Tensor([-2.0, 0.0, 3.0, 5.0], requires_grad=True)
-h = activation(x)
-
-# Il forward rende osservabili soglia, shape invariata e assenza di stato.
-print(h.data)
-print(h.shape)
-print(len(activation.parameters()))
-
-# La riduzione scalare permette di osservare la maschera nel backward.
-h.sum().backward()
-
-print(x.grad)
-```
-
-Output:
-
-```text
-[0.0, 0.0, 3.0, 5.0]
-(4,)
-0
-[0.0, 0.0, 1.0, 1.0]
-```
-
-Il layer conserva la shape e non possiede stato apprendibile. Nel backward il gradiente della somma passa attraverso le componenti in cui l'input era positivo e viene annullato per valori negativi o nulli.
-
 ### Dalle shape alla topologia del modello
 
 La sequenza
@@ -1575,7 +1625,7 @@ Non valuta la qualità della predizione e non aggiorna i parametri. Queste respo
 
 ---
 
-## 2.10 Verifica end-to-end e confine con il training loop
+## 2.11 Verifica end-to-end e confine con il training loop
 
 Il core computazionale, il modello e il training loop diventano osservabili insieme in una singola iterazione:
 
@@ -1626,7 +1676,7 @@ La prediction ha la shape richiesta dal modello e la loss è scalare. Dopo `loss
 Nello snippet:
 
 ```text
-model       istanza di TinyNet, definita nella sezione 2.9
+model       istanza di TinyNet, definita nella sezione 2.10
 loss_fn     istanza della Mean Squared Error di MyTorch
 optimizer   SGD che gestisce i Parameter esposti dal modello
 x           input con shape (1,)

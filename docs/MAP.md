@@ -57,8 +57,12 @@ Autograd
 Parameter
   è un Tensor appartenente allo stato apprendibile del modello
         ↓
+Module.named_parameters()
+  espone ricorsivamente coppie (percorso, Parameter)
+  come layer1.weight e layer1.bias
+        ↓
 Module.parameters()
-  espone ricorsivamente i Parameter all'Optimizer
+  conserva soltanto i Parameter per l'Optimizer
         ↓
 Optimizer
   usa i gradienti per modificare esclusivamente i Parameter
