@@ -1489,6 +1489,11 @@ print([parameter.shape for parameter in parameters])
 # I percorsi nominano il ruolo di ogni Parameter nella gerarchia.
 for name, parameter in named_parameters:
     print(name, parameter.shape)
+
+# Una sonda scalare verifica che il grafo colleghi la prediction ai Parameter.
+probe = prediction.sum()
+probe.backward()
+print(all(parameter.grad is not None for parameter in parameters))
 ```
 
 Output:
@@ -1502,6 +1507,7 @@ layer1.weight (4, 1)
 layer1.bias (4,)
 layer2.weight (1, 4)
 layer2.bias (1,)
+True
 ```
 
 La chiamata attraversa i tre sottomoduli e restituisce una prediction con la shape richiesta dall'ultimo `Linear`. Il suo `creator` è l'`Add` finale del secondo layer.
@@ -1521,6 +1527,8 @@ TinyNet.parameters()
 ```
 
 L'optimizer può continuare a ricevere `model.parameters()` senza conoscere nomi, numero o posizione dei singoli pesi. Strumenti di ispezione, logging o futura serializzazione possono invece usare `model.named_parameters()` per mantenere il collegamento tra ogni valore e la sua posizione nella gerarchia.
+
+`probe` non è la loss di un task e non valuta la qualità della prediction. È una riduzione scalare usata soltanto come verifica tecnica: `probe.backward()` attraversa le `Operation` create dai due `Linear` e da `ReLU` e raggiunge tutti i `Parameter`. Questo dimostra che la gerarchia del modello ha prodotto una computazione differenziabile senza richiedere un metodo `backward()` nei layer.
 
 Questa gerarchia non coincide con il grafo computazionale. La gerarchia dei moduli descrive la struttura relativamente stabile del modello e l'ownership dei parametri; il grafo computazionale descrive invece le operazioni effettivamente eseguite durante uno specifico forward.
 
@@ -1625,300 +1633,32 @@ Non valuta la qualità della predizione e non aggiorna i parametri. Queste respo
 
 ---
 
-## 2.11 Verifica end-to-end e confine con il training loop
+## Confine raggiunto: una prediction differenziabile
 
-Il core computazionale, il modello e il training loop diventano osservabili insieme in una singola iterazione:
-
-```python
-from copy import deepcopy
-
-from mytorch import MSELoss, SGD, Tensor
-
-# Prepariamo modello, criterio e optimizer come sottosistemi separati.
-model = TinyNet()
-loss_fn = MSELoss()
-optimizer = SGD(model.parameters(), lr=0.01)
-
-x = Tensor([2.0])
-target = Tensor([4.0])
-
-# Una iterazione esegue forward, loss, backward e aggiornamento in quest'ordine.
-optimizer.zero_grad()
-prediction = model(x)
-loss = loss_fn(prediction, target)
-
-# Conserviamo lo stato precedente per verificare la mutazione dell'optimizer.
-before_step = [deepcopy(p.data) for p in model.parameters()]
-loss.backward()
-
-print(prediction.shape)
-print(loss.shape)
-print(all(p.grad is not None for p in model.parameters()))
-
-# step usa i gradienti già calcolati; non percorre il grafo.
-optimizer.step()
-
-after_step = [p.data for p in model.parameters()]
-print(any(before != after for before, after in zip(before_step, after_step)))
-```
-
-Output strutturale, indipendente dai valori iniziali casuali:
+Il capitolo si ferma alla prediction prodotta da un modello differenziabile. La verifica con `probe.backward()` ha mostrato che il grafo del forward collega quella prediction ai `Parameter` posseduti dalla gerarchia di `Module`:
 
 ```text
-(1,)
-()
-True
-True
+Input Tensor
+  → TinyNet
+  → Prediction Tensor
+       ↘ grafo di Operations
+         → backward tecnico
+         → gradienti nei Parameter
 ```
 
-La prediction ha la shape richiesta dal modello e la loss è scalare. Dopo `loss.backward()` tutti i Parameter hanno ricevuto un gradiente; dopo `optimizer.step()` almeno uno dei loro valori è cambiato.
-
-Nello snippet:
+Non abbiamo ancora definito che cosa renda buona o cattiva la prediction e non abbiamo modificato lo stato del modello. Queste responsabilità appartengono al training loop, che rimane oltre il confine del capitolo:
 
 ```text
-model       istanza di TinyNet, definita nella sezione 2.10
-loss_fn     istanza della Mean Squared Error di MyTorch
-optimizer   SGD che gestisce i Parameter esposti dal modello
-x           input con shape (1,)
-target      valore atteso con shape (1,)
+Prediction + Target
+  → Loss
+  → Backward nel contesto del training
+  → Gradienti
+  → Optimizer
+  → Parameter update
+  → nuovo Forward
 ```
 
-`model.parameters()` restituisce i pesi e i bias dei due layer annidati. L'optimizer conserva riferimenti a questi stessi oggetti `Parameter`: quando esegue `step()`, modifica quindi lo stato appartenente a `model`.
-
-Queste righe non rappresentano un'unica operazione monolitica. Coordinano componenti con responsabilità e stati differenti:
-
-```text
-optimizer.zero_grad()            delimita una nuova raccolta di gradienti
-model(x)                         esegue il forward e costruisce il grafo del modello
-loss_fn(prediction, target)      prolunga il grafo fino a un obiettivo scalare
-loss.backward()                  percorre il grafo e accumula gradienti
-optimizer.step()                 modifica lo stato apprendibile
-```
-
-### Stato iniziale
-
-Prima del forward esistono già:
-
-```text
-model
-├── layer1.weight : Parameter
-├── layer1.bias   : Parameter
-├── layer2.weight : Parameter
-└── layer2.bias   : Parameter
-
-x       : Tensor di input
-target  : Tensor osservato
-```
-
-I parametri contengono i valori correnti del modello. `x` e `target` contengono i dati dell'esempio; nel training corrente non richiedono gradienti.
-
-`optimizer.zero_grad()` non modifica i valori dei parametri. Cancella soltanto i gradienti accumulati in un'iterazione precedente:
-
-```text
-parameter.data    rimane invariato
-parameter.grad    diventa None
-```
-
-Questa chiamata stabilisce il confine tra due raccolte di contributi al gradiente. Il motivo dell'accumulazione e le possibili strategie alternative saranno sviluppati nel capitolo 3.
-
-### Il modello produce la prediction
-
-La chiamata
-
-```python
-# Il modello legge input e Parameter e costruisce il grafo fino alla prediction.
-prediction = model(x)
-```
-
-attraversa la gerarchia dei `Module`:
-
-```text
-x
-↓
-layer1: weight₁ @ x + bias₁
-↓
-ReLU
-↓
-layer2: weight₂ @ hidden + bias₂
-↓
-prediction
-```
-
-A livello architetturale diciamo che il modello termina alla prediction perché il suo contratto è:
-
-```text
-input → prediction
-```
-
-A livello del grafo computazionale, invece, la prediction conserva i collegamenti alle operazioni che l'hanno generata. Attraverso quei collegamenti è ancora possibile risalire ai parametri:
-
-```text
-prediction.creator
-        ↓
-operazioni del secondo layer
-        ↓
-attivazione intermedia
-        ↓
-operazioni del primo layer
-        ↓
-Parameter
-```
-
-Quindi “il modello termina alla prediction” descrive un **confine di responsabilità**, non un'interruzione del grafo.
-
-### La loss prolunga il grafo
-
-La chiamata
-
-```python
-# La loss prolunga il grafo collegando prediction e target.
-loss = loss_fn(prediction, target)
-```
-
-non assegna semplicemente un numero alla prediction. Costruisce nuove operazioni differenziabili a valle del modello. La `MSELoss` di MyTorch è composta da primitive già presenti nel core:
-
-```python
-# MSELoss compone primitive già differenziabili del core.
-error = prediction - target
-squared_error = error ** 2
-total = squared_error.sum()
-
-# scale trasforma la somma nella media degli errori quadratici.
-return total * scale
-```
-
-Il grafo completo diventa:
-
-```text
-Parameter
-    ↓
-operazioni del modello
-    ↓
-prediction ─┐
-            ├→ Subtract → Power → Sum → Multiply → loss
-target ─────┘                                  ↑
-                                              scale
-```
-
-`target` e `scale` partecipano al calcolo numerico, ma non richiedono gradienti. La prediction, invece, ha `requires_grad=True` perché dipende dai `Parameter`. Anche la loss risultante richiede quindi il gradiente.
-
-La loss è scalare. Questo fornisce una singola quantità rispetto alla quale esprimere tutte le sensibilità:
-
-```text
-∂loss/∂weight₁
-∂loss/∂bias₁
-∂loss/∂weight₂
-∂loss/∂bias₂
-```
-
-### Il backward interroga la storia del forward
-
-La chiamata
-
-```python
-# Autograd parte dalla loss scalare e accumula i gradienti nei Parameter.
-loss.backward()
-```
-
-parte dal seed:
-
-```text
-∂loss/∂loss = 1
-```
-
-e attraversa il grafo in direzione opposta:
-
-```text
-loss
-  ↓ backward delle operazioni della loss
-prediction.grad
-  ↓ backward del secondo Linear
-gradienti di weight₂, bias₂ e hidden
-  ↓ backward di ReLU
-gradiente prima dell'attivazione
-  ↓ backward del primo Linear
-gradienti di weight₁ e bias₁
-```
-
-Ogni `Operation.backward()` riceve `grad_output`, lo combina con la propria derivata locale e restituisce un gradiente per ciascun input. `Tensor.backward()` coordina ricorsivamente il passaggio da un'operazione alla precedente.
-
-Al termine del backward:
-
-```text
-parameter.data    contiene ancora gli stessi valori del forward
-parameter.grad    contiene ∂loss/∂parameter
-```
-
-Questo punto è essenziale: **il backward non addestra ancora il modello** nel senso di modificarne i pesi. Calcola l'informazione necessaria a una successiva regola di ottimizzazione.
-
-### L'optimizer muta i parametri
-
-La chiamata
-
-```python
-# SGD legge Parameter.data e Parameter.grad per applicare l'aggiornamento.
-optimizer.step()
-```
-
-non percorre il grafo e non calcola derivate. Legge i gradienti già presenti nei `Parameter` e applica la regola SGD:
-
-```text
-parameter.data ← parameter.data - learning_rate · parameter.grad
-```
-
-La separazione è quindi:
-
-```text
-Autograd
-    determina in quale direzione e con quale sensibilità varia la loss
-
-Optimizer
-    decide come usare quell'informazione per modificare i parametri
-```
-
-Lo stesso grafo e gli stessi gradienti potrebbero essere utilizzati da una diversa regola di ottimizzazione. Analogamente, SGD non ha bisogno di conoscere se il gradiente provenga da una MSE, da un'altra loss o da una particolare architettura.
-
-### Perché serve un nuovo forward
-
-Dopo `optimizer.step()`, la prediction già calcolata non cambia retroattivamente. È un `Tensor` contenente il risultato ottenuto con i vecchi valori dei parametri.
-
-```text
-vecchi parametri → vecchia prediction → loss → gradienti
-                                         ↓
-                                  aggiornamento
-                                         ↓
-                                  nuovi parametri
-```
-
-Per osservare l'effetto dell'aggiornamento bisogna eseguire nuovamente:
-
-```python
-# Un nuovo forward usa i valori aggiornati e costruisce un nuovo grafo.
-new_prediction = model(x)
-```
-
-Il nuovo forward legge i valori aggiornati dei `Parameter` e costruisce un nuovo grafo:
-
-```text
-nuovi parametri → nuovo forward → nuova prediction → nuova loss
-```
-
-L'apprendimento diventa osservabile solo confrontando il comportamento del modello prima e dopo l'aggiornamento. Una singola iterazione non garantisce in generale che la loss diminuisca: ciò dipende dalla regola di ottimizzazione, dal learning rate e dalla geometria locale dell'obiettivo.
-
-### Confini di responsabilità
-
-L'intera sequenza può essere riletta come una tabella di contratti:
-
-| Componente | Legge | Produce o modifica | Non decide |
-|---|---|---|---|
-| `Model` | input e parametri | prediction e grafo del forward | qualità della prediction |
-| `Loss` | prediction e target | obiettivo scalare e prosecuzione del grafo | aggiornamento dei parametri |
-| `Autograd` | grafo e regole locali | gradienti | politica di ottimizzazione |
-| `Optimizer` | parametri e gradienti | nuovi valori dei parametri | struttura del modello e loss |
-
-Questi confini permettono di sostituire un componente senza riscrivere gli altri: una nuova loss può valutare lo stesso modello; un nuovo optimizer può usare gli stessi gradienti; una nuova architettura può partecipare allo stesso training loop.
-
-Il modello termina dunque concettualmente alla `Prediction`. La loss collega quella prediction a un criterio; Autograd traduce il criterio in gradienti; l'optimizer traduce i gradienti in una mutazione dello stato apprendibile. Il capitolo 3 analizzerà quantitativamente questo ciclo mediante un passo SGD completo.
+Il capitolo 3 ripartirà da questa frontiera. Introdurrà separatamente target, loss, accumulazione e azzeramento dei gradienti, optimizer, aggiornamento dei Parameter e nuovo forward prima di comporli in un passo di training completo.
 
 ---
 
